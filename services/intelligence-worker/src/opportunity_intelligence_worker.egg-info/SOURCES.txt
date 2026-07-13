@@ -1,0 +1,9 @@
+pyproject.toml
+src/opportunity_intelligence/adapter.py
+src/opportunity_intelligence/models.py
+src/opportunity_intelligence_worker.egg-info/PKG-INFO
+src/opportunity_intelligence_worker.egg-info/SOURCES.txt
+src/opportunity_intelligence_worker.egg-info/dependency_links.txt
+src/opportunity_intelligence_worker.egg-info/requires.txt
+src/opportunity_intelligence_worker.egg-info/top_level.txt
+tests/test_models.py

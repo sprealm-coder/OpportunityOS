@@ -1,0 +1,12 @@
+[project]
+name = "opportunity-crawler-worker"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.11,<3", "httpx>=0.28,<1", "beautifulsoup4>=4.13,<5", "playwright>=1.55,<2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.4,<9"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+

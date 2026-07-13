@@ -1,0 +1,5 @@
+pydantic<3,>=2.11
+httpx<1,>=0.28
+
+[test]
+pytest<9,>=8.4

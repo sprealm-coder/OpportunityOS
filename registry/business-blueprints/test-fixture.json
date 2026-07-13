@@ -1,0 +1,20 @@
+{
+  "name": "Test Business Blueprint",
+  "description": "Neutral fixture used only by automated tests.",
+  "source_opportunity_id": "test-opportunity",
+  "business_model": {"fixture": true},
+  "target_market_definition": {"name": "Test Market Segment"},
+  "value_proposition": "Test Value Proposition",
+  "revenue_model": {"type": "test"},
+  "delivery_model": {"type": "workflow"},
+  "required_capabilities": [{"name": "Test Capability"}],
+  "product_definitions": [{"name": "Test Product"}],
+  "workflow_definitions": [{"name": "Test Workflow"}],
+  "metering_definitions": [{"unit": "test_unit"}],
+  "pricing_definitions": [{"currency": "USD"}],
+  "growth_playbook": {"fixture": true},
+  "compliance_profile": {"classification": "test"},
+  "launch_plan": {"fixture": true},
+  "validation_metrics": {"fixture": true}
+}
+

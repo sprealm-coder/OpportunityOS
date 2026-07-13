@@ -1,0 +1,7 @@
+pydantic<3,>=2.11
+httpx<1,>=0.28
+beautifulsoup4<5,>=4.13
+playwright<2,>=1.55
+
+[test]
+pytest<9,>=8.4

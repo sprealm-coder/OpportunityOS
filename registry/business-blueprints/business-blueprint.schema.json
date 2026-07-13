@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opportunity-os.local/schemas/business-blueprint.json",
+  "title": "BusinessBlueprint",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "description", "source_opportunity_id", "business_model", "target_market_definition", "value_proposition", "revenue_model", "delivery_model", "required_capabilities", "product_definitions", "workflow_definitions", "metering_definitions", "pricing_definitions", "growth_playbook", "compliance_profile", "launch_plan", "validation_metrics"],
+  "properties": {
+    "name": {"type": "string", "minLength": 1},
+    "description": {"type": "string"},
+    "source_opportunity_id": {"type": "string", "minLength": 1},
+    "business_model": {"type": "object"},
+    "target_market_definition": {"type": "object"},
+    "value_proposition": {"type": "string", "minLength": 1},
+    "revenue_model": {"type": "object"},
+    "delivery_model": {"type": "object"},
+    "required_capabilities": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+    "product_definitions": {"type": "array", "items": {"type": "object"}},
+    "workflow_definitions": {"type": "array", "items": {"type": "object"}},
+    "metering_definitions": {"type": "array", "items": {"type": "object"}},
+    "pricing_definitions": {"type": "array", "items": {"type": "object"}},
+    "growth_playbook": {"type": "object"},
+    "compliance_profile": {"type": "object"},
+    "launch_plan": {"type": "object"},
+    "validation_metrics": {"type": "object"}
+  }
+}
+

@@ -1,0 +1,14 @@
+.env
+.venv/
+.pytest_cache/
+__pycache__/
+.next/
+node_modules/
+dist/
+coverage/
+bin/
+*.exe
+*.test
+data/postgres/
+data/redis/
+data/minio/

@@ -1,0 +1,1 @@
+{"name":"@opportunity-os/customer-portal","version":"0.1.0","private":true,"scripts":{"dev":"next dev -p 3002","build":"next build","typecheck":"tsc --noEmit"},"dependencies":{"@opportunity-os/ui":"workspace:*","next":"^15.4.6","react":"^19.1.1","react-dom":"^19.1.1"},"devDependencies":{"@types/node":"^24.3.0","@types/react":"^19.1.10","typescript":"^5.9.2"}}
