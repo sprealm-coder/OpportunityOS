@@ -12,22 +12,29 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/application"
+	"github.com/opportunity-os/opportunity-os/services/core-api/internal/auth"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/opportunity"
+	"github.com/opportunity-os/opportunity-os/services/core-api/internal/permission"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/platform"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/tenancy"
 )
 
 type Server struct {
-	store   application.Store
-	limiter *rateLimiter
+	store           application.Store
+	limiter         *rateLimiter
+	allowHeaderAuth bool
 }
 
 func New() http.Handler {
-	return NewWithStore(application.NewMemoryStore())
+	return newHandler(application.NewMemoryStore(), true)
 }
 
 func NewWithStore(store application.Store) http.Handler {
-	server := &Server{store: store, limiter: newRateLimiter(120, time.Minute)}
+	return newHandler(store, false)
+}
+
+func newHandler(store application.Store, allowHeaderAuth bool) http.Handler {
+	server := &Server{store: store, limiter: newRateLimiter(120, time.Minute), allowHeaderAuth: allowHeaderAuth}
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(server.requestContext)
@@ -38,23 +45,83 @@ func NewWithStore(store application.Store) http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "core-api"})
 	})
 	r.Route("/v1", func(r chi.Router) {
-		r.Use(tenancy.Middleware)
-		r.Get("/opportunities", server.listOpportunities)
-		r.Post("/opportunities", server.createOpportunity)
-		r.Get("/opportunities/{id}", server.getOpportunity)
-		r.Post("/opportunities/{id}/evidence", server.addEvidence)
-		r.Post("/opportunities/{id}/score", server.scoreOpportunity)
-		r.Post("/opportunities/{id}/transitions", server.transitionOpportunity)
-		r.Post("/opportunities/{id}/reviews", server.reviewOpportunity)
-		r.Post("/opportunities/{id}/incubations", server.createIncubation)
-		r.Post("/opportunities/{id}/blueprints", server.createBlueprint)
-		r.Get("/incubations", server.listIncubations)
-		r.Post("/incubations/{id}/transitions", server.transitionIncubation)
-		r.Get("/blueprints", server.listBlueprints)
-		r.Post("/blueprints/{id}/transitions", server.transitionBlueprint)
-		r.Get("/audit", server.listAudit)
+		r.Post("/auth/sessions", server.createSession)
+		r.Group(func(r chi.Router) {
+			r.Use(server.authenticate)
+			r.Get("/auth/session", server.getSession)
+			r.Delete("/auth/session", server.deleteSession)
+			r.With(server.requirePermission(permission.OpportunityRead)).Get("/opportunities", server.listOpportunities)
+			r.With(server.requirePermission(permission.OpportunityCreate)).Post("/opportunities", server.createOpportunity)
+			r.With(server.requirePermission(permission.OpportunityRead)).Get("/opportunities/{id}", server.getOpportunity)
+			r.With(server.requirePermission(permission.OpportunityEvidence)).Post("/opportunities/{id}/evidence", server.addEvidence)
+			r.With(server.requirePermission(permission.OpportunityScore)).Post("/opportunities/{id}/score", server.scoreOpportunity)
+			r.With(server.requirePermission(permission.OpportunitySubmit)).Post("/opportunities/{id}/transitions", server.transitionOpportunity)
+			r.With(server.requirePermission(permission.OpportunityReview)).Post("/opportunities/{id}/reviews", server.reviewOpportunity)
+			r.With(server.requirePermission(permission.IncubationWrite)).Post("/opportunities/{id}/incubations", server.createIncubation)
+			r.With(server.requirePermission(permission.BlueprintWrite)).Post("/opportunities/{id}/blueprints", server.createBlueprint)
+			r.With(server.requirePermission(permission.IncubationRead)).Get("/incubations", server.listIncubations)
+			r.With(server.requirePermission(permission.IncubationWrite)).Post("/incubations/{id}/transitions", server.transitionIncubation)
+			r.With(server.requirePermission(permission.BlueprintRead)).Get("/blueprints", server.listBlueprints)
+			r.With(server.requirePermission(permission.BlueprintWrite)).Post("/blueprints/{id}/transitions", server.transitionBlueprint)
+			r.With(server.requirePermission(permission.CapabilityRead)).Get("/capabilities", server.listCapabilities)
+			r.With(server.requirePermission(permission.CapabilityWrite)).Post("/capabilities", server.createCapability)
+			r.With(server.requirePermission(permission.ProviderRead)).Get("/providers", server.listProviders)
+			r.With(server.requirePermission(permission.ProviderWrite)).Post("/providers", server.createProvider)
+			r.With(server.requirePermission(permission.ProviderWrite)).Post("/providers/{id}/endpoints", server.createProviderEndpoint)
+			r.With(server.requirePermission(permission.ProductRead)).Get("/products", server.listProducts)
+			r.With(server.requirePermission(permission.ProductRead)).Get("/products/{id}", server.getProduct)
+			r.With(server.requirePermission(permission.ProductWrite)).Post("/blueprints/{id}/products", server.createProduct)
+			r.With(server.requirePermission(permission.ProductWrite)).Post("/products/{id}/versions", server.createProductVersion)
+			r.With(server.requirePermission(permission.ProductWrite)).Post("/products/{id}/skus", server.createSKU)
+			r.With(server.requirePermission(permission.ProductWrite)).Post("/skus/{id}/versions", server.createSKUVersion)
+			r.With(server.requirePermission(permission.ProductPublish)).Post("/products/{id}/publications", server.publishProduct)
+			r.With(server.requirePermission(permission.AuditRead)).Get("/audit", server.listAudit)
+		})
 	})
 	return r
+}
+
+func (s *Server) authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.allowHeaderAuth {
+			tenantID := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+			actorID := strings.TrimSpace(r.Header.Get("X-Actor-ID"))
+			if tenantID != "" && actorID != "" {
+				scope := tenancy.Scope{TenantID: tenantID, ActorID: actorID, Role: "admin", TraceID: r.Header.Get("X-Trace-ID")}
+				next.ServeHTTP(w, r.WithContext(tenancy.WithScope(r.Context(), scope)))
+				return
+			}
+		}
+		cookie, err := r.Cookie(auth.SessionCookie)
+		if err != nil {
+			writeError(w, r, http.StatusUnauthorized, platform.Invalid("authentication_required", "a valid session is required"))
+			return
+		}
+		session, err := s.store.ResolveSession(r.Context(), cookie.Value)
+		if err != nil {
+			writeError(w, r, http.StatusUnauthorized, platform.Invalid("authentication_required", "a valid session is required"))
+			return
+		}
+		tenantScope := tenancy.Scope{TenantID: session.TenantID, ActorID: session.UserID, Role: session.Role, TraceID: r.Header.Get("X-Trace-ID")}
+		next.ServeHTTP(w, r.WithContext(tenancy.WithScope(r.Context(), tenantScope)))
+	})
+}
+
+func (s *Server) requirePermission(required string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tenantScope, err := scope(r)
+			if err != nil {
+				writeError(w, r, http.StatusUnauthorized, err)
+				return
+			}
+			if err = permission.RequireRole(tenantScope.Role, required); err != nil {
+				writeError(w, r, http.StatusForbidden, err)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func (s *Server) requestContext(next http.Handler) http.Handler {
@@ -96,9 +163,10 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if allowed[origin] {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key, X-Tenant-ID, X-Actor-ID, X-Request-ID, X-Trace-ID")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key, X-Request-ID, X-Trace-ID")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -106,6 +174,52 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	session, err := s.store.CreateSession(r.Context(), input.Email, input.Password)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, platform.Invalid("invalid_credentials", "email or password is incorrect"))
+		return
+	}
+	maxAge := int(time.Until(session.ExpiresAt).Seconds())
+	http.SetCookie(w, &http.Cookie{
+		Name: auth.SessionCookie, Value: session.Token, Path: "/", Expires: session.ExpiresAt,
+		MaxAge: maxAge, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode,
+	})
+	writeJSON(w, http.StatusCreated, session)
+}
+
+func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(auth.SessionCookie)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, platform.Invalid("authentication_required", "a valid session is required"))
+		return
+	}
+	session, err := s.store.ResolveSession(r.Context(), cookie.Value)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, platform.Invalid("authentication_required", "a valid session is required"))
+		return
+	}
+	writeJSON(w, http.StatusOK, session)
+}
+
+func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(auth.SessionCookie); err == nil {
+		if err = s.store.RevokeSession(r.Context(), cookie.Value); err != nil {
+			writeError(w, r, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	http.SetCookie(w, &http.Cookie{Name: auth.SessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func scope(r *http.Request) (tenancy.Scope, error) { return tenancy.FromContext(r.Context()) }
@@ -436,6 +550,263 @@ func (s *Server) transitionBlueprint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) createCapability(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		Name        string         `json:"name"`
+		Description string         `json:"description"`
+		Definition  map[string]any `json:"definition"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.CreateCapability(r.Context(), tenantScope, input.Name, input.Description, input.Definition, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) listCapabilities(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	items, err := s.store.ListCapabilities(r.Context(), tenantScope)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) createProvider(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.CreateProvider(r.Context(), tenantScope, input.Name, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) listProviders(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	items, err := s.store.ListProviders(r.Context(), tenantScope)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) createProviderEndpoint(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		CapabilityID   string `json:"capability_id"`
+		AdapterType    string `json:"adapter_type"`
+		AdapterVersion string `json:"adapter_version"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.CreateProviderEndpoint(r.Context(), tenantScope, chi.URLParam(r, "id"), input.CapabilityID, input.AdapterType, input.AdapterVersion, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) createProduct(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.CreateProduct(r.Context(), tenantScope, chi.URLParam(r, "id"), input.Name, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) listProducts(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	items, err := s.store.ListProducts(r.Context(), tenantScope)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) getProduct(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	item, err := s.store.GetProduct(r.Context(), tenantScope, chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, platform.Invalid("not_found", "product not found"))
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) createProductVersion(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input application.ProductVersionInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.CreateProductVersion(r.Context(), tenantScope, chi.URLParam(r, "id"), input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) createSKU(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		Code string `json:"code"`
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.CreateSKU(r.Context(), tenantScope, chi.URLParam(r, "id"), input.Code, input.Name, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) createSKUVersion(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input application.SKUVersionInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.CreateSKUVersion(r.Context(), tenantScope, chi.URLParam(r, "id"), input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) publishProduct(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		ProductVersionID string `json:"product_version_id"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.PublishProduct(r.Context(), tenantScope, chi.URLParam(r, "id"), input.ProductVersionID, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

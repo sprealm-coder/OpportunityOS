@@ -13,8 +13,11 @@ type Candidate struct {
 	Capacity           int
 }
 type Policy struct {
-	ID, TenantID, Strategy string
-	Version                int
+	ID       string `json:"id"`
+	TenantID string `json:"tenant_id"`
+	Name     string `json:"name"`
+	Strategy string `json:"strategy"`
+	Version  int    `json:"version"`
 }
 
 func (p Policy) Select(candidates []Candidate) (Candidate, error) {

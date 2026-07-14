@@ -30,9 +30,42 @@ type Store struct {
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool, queries: generateddb.New(pool)} }
 
+func beginTenantTx(ctx context.Context, pool *pgxpool.Pool, tenantID string) (pgx.Tx, error) {
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, `SELECT set_config('app.tenant_id',$1,true)`, tenantID); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, mapError(err)
+	}
+	if _, err = tx.Exec(ctx, `SET LOCAL ROLE opportunity_app`); err != nil {
+		_ = tx.Rollback(ctx)
+		return nil, mapError(err)
+	}
+	return tx, nil
+}
+
+func runTenantRead[T any](ctx context.Context, store *Store, tenantID string, read func(pgx.Tx) (T, error)) (T, error) {
+	var zero T
+	tx, err := beginTenantTx(ctx, store.pool, tenantID)
+	if err != nil {
+		return zero, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	result, err := read(tx)
+	if err != nil {
+		return zero, mapError(err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return zero, mapError(err)
+	}
+	return result, nil
+}
+
 func runCommand[T any](ctx context.Context, store *Store, scope tenancy.Scope, key, operation string, command func(pgx.Tx) (T, string, error)) (T, error) {
 	var zero T
-	tx, err := store.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	tx, err := beginTenantTx(ctx, store.pool, scope.TenantID)
 	if err != nil {
 		return zero, err
 	}
@@ -182,7 +215,7 @@ func evidenceFromDB(item generateddb.OpportunityEvidence) opportunity.Evidence {
 	}
 }
 
-func (s *Store) sqlcEvidence(ctx context.Context, tenantID, opportunityID string) ([]opportunity.Evidence, error) {
+func sqlcEvidence(ctx context.Context, queries *generateddb.Queries, tenantID, opportunityID string) ([]opportunity.Evidence, error) {
 	tenantUUID, err := parseUUID(tenantID)
 	if err != nil {
 		return nil, err
@@ -191,7 +224,7 @@ func (s *Store) sqlcEvidence(ctx context.Context, tenantID, opportunityID string
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.queries.ListOpportunityEvidence(ctx, generateddb.ListOpportunityEvidenceParams{TenantID: tenantUUID, OpportunityID: opportunityUUID})
+	rows, err := queries.ListOpportunityEvidence(ctx, generateddb.ListOpportunityEvidenceParams{TenantID: tenantUUID, OpportunityID: opportunityUUID})
 	if err != nil {
 		return nil, mapError(err)
 	}
@@ -256,42 +289,48 @@ func (s *Store) CreateOpportunity(ctx context.Context, scope tenancy.Scope, name
 }
 
 func (s *Store) ListOpportunities(ctx context.Context, scope tenancy.Scope) ([]opportunity.Opportunity, error) {
-	tenantID, err := parseUUID(scope.TenantID)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.queries.ListOpportunities(ctx, generateddb.ListOpportunitiesParams{TenantID: tenantID, Limit: 200})
-	if err != nil {
-		return nil, mapError(err)
-	}
-	items := make([]opportunity.Opportunity, 0, len(rows))
-	for _, row := range rows {
-		item := opportunityFromDB(row)
-		item.Evidence, err = s.sqlcEvidence(ctx, scope.TenantID, item.ID)
+	return runTenantRead(ctx, s, scope.TenantID, func(tx pgx.Tx) ([]opportunity.Opportunity, error) {
+		tenantID, err := parseUUID(scope.TenantID)
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, item)
-	}
-	return items, nil
+		queries := s.queries.WithTx(tx)
+		rows, err := queries.ListOpportunities(ctx, generateddb.ListOpportunitiesParams{TenantID: tenantID, Limit: 200})
+		if err != nil {
+			return nil, err
+		}
+		items := make([]opportunity.Opportunity, 0, len(rows))
+		for _, row := range rows {
+			item := opportunityFromDB(row)
+			item.Evidence, err = sqlcEvidence(ctx, queries, scope.TenantID, item.ID)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
+		}
+		return items, nil
+	})
 }
 
 func (s *Store) GetOpportunity(ctx context.Context, scope tenancy.Scope, id string) (opportunity.Opportunity, error) {
-	tenantID, err := parseUUID(scope.TenantID)
-	if err != nil {
-		return opportunity.Opportunity{}, err
-	}
-	opportunityID, err := parseUUID(id)
-	if err != nil {
-		return opportunity.Opportunity{}, err
-	}
-	row, err := s.queries.GetOpportunity(ctx, generateddb.GetOpportunityParams{TenantID: tenantID, ID: opportunityID})
-	if err != nil {
-		return opportunity.Opportunity{}, mapError(err)
-	}
-	item := opportunityFromDB(row)
-	item.Evidence, err = s.sqlcEvidence(ctx, scope.TenantID, id)
-	return item, err
+	return runTenantRead(ctx, s, scope.TenantID, func(tx pgx.Tx) (opportunity.Opportunity, error) {
+		tenantID, err := parseUUID(scope.TenantID)
+		if err != nil {
+			return opportunity.Opportunity{}, err
+		}
+		opportunityID, err := parseUUID(id)
+		if err != nil {
+			return opportunity.Opportunity{}, err
+		}
+		queries := s.queries.WithTx(tx)
+		row, err := queries.GetOpportunity(ctx, generateddb.GetOpportunityParams{TenantID: tenantID, ID: opportunityID})
+		if err != nil {
+			return opportunity.Opportunity{}, err
+		}
+		item := opportunityFromDB(row)
+		item.Evidence, err = sqlcEvidence(ctx, queries, scope.TenantID, id)
+		return item, err
+	})
 }
 
 func (s *Store) AddEvidence(ctx context.Context, scope tenancy.Scope, id string, evidence opportunity.Evidence, key string) (opportunity.Opportunity, error) {
@@ -435,22 +474,24 @@ func (s *Store) ReviewOpportunity(ctx context.Context, scope tenancy.Scope, id, 
 }
 
 func (s *Store) ListAudit(ctx context.Context, scope tenancy.Scope) ([]audit.Record, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id,tenant_id,actor_id,action,object_type,object_id,request_id,trace_id,metadata,created_at FROM audit_log WHERE tenant_id=$1 ORDER BY created_at DESC,id LIMIT 200`, scope.TenantID)
-	if err != nil {
-		return nil, mapError(err)
-	}
-	defer rows.Close()
-	items := []audit.Record{}
-	for rows.Next() {
-		var item audit.Record
-		var metadata []byte
-		if err := rows.Scan(&item.ID, &item.TenantID, &item.ActorID, &item.Action, &item.ObjectType, &item.ObjectID, &item.RequestID, &item.TraceID, &metadata, &item.CreatedAt); err != nil {
+	return runTenantRead(ctx, s, scope.TenantID, func(tx pgx.Tx) ([]audit.Record, error) {
+		rows, err := tx.Query(ctx, `SELECT id,tenant_id,actor_id,action,object_type,object_id,request_id,trace_id,metadata,created_at FROM audit_log WHERE tenant_id=$1 ORDER BY created_at DESC,id LIMIT 200`, scope.TenantID)
+		if err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal(metadata, &item.Metadata)
-		items = append(items, item)
-	}
-	return items, rows.Err()
+		defer rows.Close()
+		items := []audit.Record{}
+		for rows.Next() {
+			var item audit.Record
+			var metadata []byte
+			if err := rows.Scan(&item.ID, &item.TenantID, &item.ActorID, &item.Action, &item.ObjectType, &item.ObjectID, &item.RequestID, &item.TraceID, &metadata, &item.CreatedAt); err != nil {
+				return nil, err
+			}
+			_ = json.Unmarshal(metadata, &item.Metadata)
+			items = append(items, item)
+		}
+		return items, rows.Err()
+	})
 }
 
 func scanIncubation(row rowScanner) (incubation.Project, error) {
@@ -498,20 +539,22 @@ func (s *Store) CreateIncubation(ctx context.Context, scope tenancy.Scope, oppor
 }
 
 func (s *Store) ListIncubations(ctx context.Context, scope tenancy.Scope) ([]incubation.Project, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id,tenant_id,opportunity_id,name,status,version,created_at,updated_at FROM incubation_projects WHERE tenant_id=$1 ORDER BY updated_at DESC,id LIMIT 200`, scope.TenantID)
-	if err != nil {
-		return nil, mapError(err)
-	}
-	defer rows.Close()
-	items := []incubation.Project{}
-	for rows.Next() {
-		item, err := scanIncubation(rows)
+	return runTenantRead(ctx, s, scope.TenantID, func(tx pgx.Tx) ([]incubation.Project, error) {
+		rows, err := tx.Query(ctx, `SELECT id,tenant_id,opportunity_id,name,status,version,created_at,updated_at FROM incubation_projects WHERE tenant_id=$1 ORDER BY updated_at DESC,id LIMIT 200`, scope.TenantID)
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+		defer rows.Close()
+		items := []incubation.Project{}
+		for rows.Next() {
+			item, err := scanIncubation(rows)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
+		}
+		return items, rows.Err()
+	})
 }
 
 func (s *Store) TransitionIncubation(ctx context.Context, scope tenancy.Scope, id, to, key string) (incubation.Project, error) {
@@ -601,20 +644,22 @@ func (s *Store) CreateBlueprint(ctx context.Context, scope tenancy.Scope, opport
 }
 
 func (s *Store) ListBlueprints(ctx context.Context, scope tenancy.Scope) ([]blueprint.BusinessBlueprint, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id,tenant_id,source_opportunity_id,name,description,version,status,definition,created_by,approved_by,created_at,updated_at FROM business_blueprints WHERE tenant_id=$1 ORDER BY updated_at DESC,id LIMIT 200`, scope.TenantID)
-	if err != nil {
-		return nil, mapError(err)
-	}
-	defer rows.Close()
-	items := []blueprint.BusinessBlueprint{}
-	for rows.Next() {
-		item, err := scanBlueprint(rows)
+	return runTenantRead(ctx, s, scope.TenantID, func(tx pgx.Tx) ([]blueprint.BusinessBlueprint, error) {
+		rows, err := tx.Query(ctx, `SELECT id,tenant_id,source_opportunity_id,name,description,version,status,definition,created_by,approved_by,created_at,updated_at FROM business_blueprints WHERE tenant_id=$1 ORDER BY updated_at DESC,id LIMIT 200`, scope.TenantID)
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
+		defer rows.Close()
+		items := []blueprint.BusinessBlueprint{}
+		for rows.Next() {
+			item, err := scanBlueprint(rows)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, item)
+		}
+		return items, rows.Err()
+	})
 }
 
 func (s *Store) TransitionBlueprint(ctx context.Context, scope tenancy.Scope, id, to, key string) (blueprint.BusinessBlueprint, error) {

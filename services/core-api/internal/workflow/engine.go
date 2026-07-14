@@ -31,21 +31,24 @@ const (
 var supported = map[NodeType]bool{Start: true, Validate: true, Transform: true, Condition: true, Approval: true, RealtimeCall: true, AsyncSubmit: true, AsyncWait: true, Provision: true, ManualTask: true, WebhookWait: true, Meter: true, Notify: true, Compensate: true, End: true}
 
 type Node struct {
-	ID         string
-	Type       NodeType
-	Config     map[string]any
-	RetryLimit int
-	Timeout    time.Duration
+	ID         string         `json:"id"`
+	Type       NodeType       `json:"type"`
+	Config     map[string]any `json:"config,omitempty"`
+	RetryLimit int            `json:"retry_limit,omitempty"`
+	Timeout    time.Duration  `json:"timeout,omitempty"`
 }
 type Edge struct {
-	From, To  string
-	Condition string
+	From      string `json:"from"`
+	To        string `json:"to"`
+	Condition string `json:"condition,omitempty"`
 }
 type Definition struct {
-	ID, TenantID, Name string
-	Version            int
-	Nodes              []Node
-	Edges              []Edge
+	ID       string `json:"id"`
+	TenantID string `json:"tenant_id"`
+	Name     string `json:"name"`
+	Version  int    `json:"version"`
+	Nodes    []Node `json:"nodes"`
+	Edges    []Edge `json:"edges"`
 }
 type StepRun struct {
 	NodeID                 string

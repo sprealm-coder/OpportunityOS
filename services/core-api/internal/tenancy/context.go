@@ -16,6 +16,7 @@ type Scope struct {
 	TenantID string
 	ActorID  string
 	TraceID  string
+	Role     string
 }
 
 func WithScope(ctx context.Context, scope Scope) context.Context {

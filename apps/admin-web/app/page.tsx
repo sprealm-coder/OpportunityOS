@@ -1,14 +1,10 @@
 "use client";
 
-import { CoreApiClient, type AuditRecord, type Collection } from "@opportunity-os/contracts";
-import { Metric, PortalShell, StatusBadge } from "@opportunity-os/ui";
+import { CoreApiClient, type AuditRecord, type Collection, type Session } from "@opportunity-os/contracts";
+import { LoginScreen, Metric, PortalShell, StatusBadge } from "@opportunity-os/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const api = new CoreApiClient(
-  process.env.NEXT_PUBLIC_CORE_API_URL ?? "http://127.0.0.1:8080",
-  process.env.NEXT_PUBLIC_TENANT_ID ?? "00000000-0000-4000-8000-000000000001",
-  process.env.NEXT_PUBLIC_ACTOR_ID ?? "admin-web"
-);
+const api = new CoreApiClient(process.env.NEXT_PUBLIC_CORE_API_URL ?? "http://127.0.0.1:8080");
 
 const nav = ["系统首页", "租户与品牌", "角色与权限", "功能开关", "审计日志", "风险事件", "对象 Schema", "发布策略"].map(label => ({ label, href: "#audit" }));
 const objects = [
@@ -20,6 +16,10 @@ const objects = [
 ];
 
 export default function Page() {
+	const [session, setSession] = useState<Session | null>(null);
+	const [authLoading, setAuthLoading] = useState(true);
+	const [authBusy, setAuthBusy] = useState(false);
+	const [authError, setAuthError] = useState<string | null>(null);
   const [audit, setAudit] = useState<AuditRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,13 +29,39 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    load().catch(error => setError(error instanceof Error ? error.message : "无法读取审计日志")).finally(() => setLoading(false));
-  }, [load]);
+		api.session().then(setSession).catch(() => setSession(null)).finally(() => setAuthLoading(false));
+	}, []);
+
+	useEffect(() => {
+		if (!session) return;
+		setLoading(true);
+		load().catch(error => setError(error instanceof Error ? error.message : "无法读取审计日志")).finally(() => setLoading(false));
+	}, [load, session]);
+
+	async function login(email: string, password: string) {
+		setAuthBusy(true);
+		setAuthError(null);
+		try {
+			setSession(await api.login(email, password));
+		} catch (error) {
+			setAuthError(error instanceof Error ? error.message : "登录失败");
+		} finally {
+			setAuthBusy(false);
+		}
+	}
+
+	async function logout() {
+		await api.logout().catch(() => undefined);
+		setSession(null);
+		setAudit([]);
+	}
 
   const actors = useMemo(() => new Set(audit.map(item => item.actor_id)).size, [audit]);
   const objectsTouched = useMemo(() => new Set(audit.map(item => `${item.object_type}:${item.object_id}`)).size, [audit]);
+	if (authLoading) return <div className="auth-screen"><div className="loading">正在恢复会话...</div></div>;
+	if (!session) return <LoginScreen title="平台管理" error={authError} busy={authBusy} onLogin={login} />;
 
-  return <PortalShell title="平台管理" role="Admin Web" navigation={nav}>
+	return <PortalShell title="平台管理" role="Admin Web" navigation={nav} tenantLabel={session.tenant_name} userLabel={`${session.display_name} · ${session.role}`} onLogout={logout}>
     {error && <div className="notice error" role="alert">{error}</div>}
     <div className="metrics">
       <Metric label="审计事件" value={String(audit.length)} detail="当前租户最近 200 条" />

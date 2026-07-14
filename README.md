@@ -2,15 +2,16 @@
 
 OpportunityOS is a product-agnostic commercial operating system. This monorepo contains the control, execution, growth, governance, and data/learning planes required to turn evidence into versioned products, orders, execution, accounting, settlement, and outcome feedback.
 
-The current verified slice includes PostgreSQL-backed tenant-scoped opportunity, evidence, review, incubation, and business-blueprint commands; transaction-scoped audit and outbox writes; state machines; capability/provider separation; schema validation; a controlled workflow DAG; metering; integer pricing; routing; immutable product publication checks; version-bound orders; execution adapters; webhook/SSRF defenses; and an append-only balanced ledger. Neutral end-to-end tests use only Test Capability, Test Provider, Test Product, and Test Customer.
+The current verified slice includes PostgreSQL-backed tenant-scoped opportunity, evidence, review, incubation, and business-blueprint commands; capability/provider/endpoint registration; Product, immutable ProductVersion, SKU and SKUVersion persistence; versioned schema/workflow/metering/pricing/routing bindings; gated publication; transaction-scoped audit and outbox writes; state machines; version-bound orders; execution adapters; webhook/SSRF defenses; and an append-only balanced ledger. Neutral end-to-end tests use only Test Capability, Test Provider, Test Product, and Test Customer.
 
-This is an engineering foundation and executable control-plane slice, not a claim that every first-release module is production complete. The core API now uses pgx/sqlc PostgreSQL repositories at runtime. Admin and operator portals consume the tenant-scoped API with explicit development identity headers; production authentication and authorization claims are the next boundary.
+This is an engineering foundation and executable control-plane slice, not a claim that every first-release module is production complete. The core API uses pgx/sqlc PostgreSQL repositories at runtime. Database-backed sessions establish trusted tenant, actor, and role claims; command routes enforce role permissions; PostgreSQL RLS runs business transactions through a non-owner role. Admin and operator portals use HttpOnly Cookie sessions, and the operator portal exposes the current opportunity-to-publication control chain. Persisted outbox delivery uses concurrent leases, exponential retry, dead-letter state, and a Redis Streams publisher; inbound events have PostgreSQL-backed tenant-scoped deduplication.
 
 ## Prerequisites
 
 - Go 1.26+
 - Node.js 24+
 - pnpm 11+
+- Redis 5+ for Streams delivery (Compose uses Redis 7.4)
 - Docker with Compose
 - GNU Make is optional; the underlying task runner works on Windows without Make.
 
@@ -34,7 +35,15 @@ Start the current control-plane stack:
 corepack pnpm node scripts/task.mjs dev
 ```
 
-The core API listens on `:8080`; `admin-web` uses port 3000 and `operator-console` uses port 3001. Mutating API requests require `X-Tenant-ID`, `X-Actor-ID`, and `Idempotency-Key`. The neutral development tenant is `00000000-0000-4000-8000-000000000001`.
+The core API listens on `:8080`; `admin-web` uses port 3000 and `operator-console` uses port 3001. Browser clients authenticate through `POST /v1/auth/sessions`; mutating API requests require `Idempotency-Key`. The neutral development login is `admin@opportunity.local` / `opportunity-dev`, scoped to tenant `00000000-0000-4000-8000-000000000001`.
+
+Run the reliable event publisher after PostgreSQL and Redis are available:
+
+```bash
+go run ./services/core-api/cmd/outbox-worker
+```
+
+The worker accepts `DATABASE_URL`, `REDIS_URL`, `OUTBOX_STREAM`, `OUTBOX_BATCH_SIZE`, `OUTBOX_MAX_ATTEMPTS`, and `OUTBOX_POLL_MS`.
 
 Worker tests run in a repository-local Python environment:
 
@@ -47,7 +56,7 @@ py -3.12 -m venv .venv
 ## Repository map
 
 - `apps/`: role-specific Next.js portals; admin and operator are the current primary surfaces.
-- `services/core-api/`: Go modular core, pgx/sqlc repositories, migrations, OpenAPI, and tests.
+- `services/core-api/`: Go modular core, authenticated HTTP API, RLS-aware pgx/sqlc repositories, delivery worker, migrations, OpenAPI, and tests.
 - `services/intelligence-worker/`: typed, advisory-only intelligence adapter contracts.
 - `services/crawler-worker/`: public-source collection with SSRF policy enforcement.
 - `packages/`: shared web contracts and UI.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpportunityOS Core API
-  version: 0.2.0
+  version: 0.3.0
 servers:
   - url: http://127.0.0.1:8080
 paths:
@@ -11,6 +11,41 @@ paths:
       security: []
       responses:
         "200": { description: Healthy }
+  /v1/auth/sessions:
+    post:
+      operationId: createSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        "201":
+          description: Authenticated session; sets an HttpOnly SameSite cookie
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { description: Invalid credentials }
+  /v1/auth/session:
+    get:
+      operationId: getSession
+      responses:
+        "200":
+          description: Current authenticated session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { description: Missing or expired session }
+    delete:
+      operationId: deleteSession
+      responses:
+        "204": { description: Session revoked }
   /v1/opportunities:
     get:
       operationId: listOpportunities
@@ -115,6 +150,96 @@ paths:
       operationId: transitionBlueprint
       responses:
         "200": { description: Blueprint transitioned }
+  /v1/capabilities:
+    get:
+      operationId: listCapabilities
+      responses:
+        "200": { description: Tenant capability collection }
+    post:
+      operationId: createCapability
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                definition: { type: object, additionalProperties: true }
+      responses:
+        "201": { description: Capability created }
+  /v1/providers:
+    get:
+      operationId: listProviders
+      responses:
+        "200": { description: Provider collection with endpoints }
+    post:
+      operationId: createProvider
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Provider created }
+  /v1/providers/{id}/endpoints:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createProviderEndpoint
+      responses:
+        "201": { description: Provider endpoint created }
+  /v1/blueprints/{id}/products:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createProductFromBlueprint
+      responses:
+        "201": { description: Product draft created }
+        "409": { description: Blueprint has not passed approval }
+  /v1/products:
+    get:
+      operationId: listProducts
+      responses:
+        "200": { description: Product collection }
+  /v1/products/{id}:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }]
+    get:
+      operationId: getProduct
+      responses:
+        "200":
+          description: Product with immutable versions, SKUs, and publications
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+  /v1/products/{id}/versions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createProductVersion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductVersionInput" }
+      responses:
+        "201": { description: Immutable product version and versioned bindings created }
+        "422": { description: Schema, workflow, metering, pricing, routing, delivery, or compliance validation failed }
+  /v1/products/{id}/skus:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createSKU
+      responses:
+        "201": { description: SKU draft created }
+  /v1/skus/{id}/versions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createSKUVersion
+      responses:
+        "201": { description: Immutable SKU version created with product bindings }
+  /v1/products/{id}/publications:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: publishProduct
+      responses:
+        "201": { description: Product version published }
+        "409": { description: Publication readiness check failed }
   /v1/audit:
     get:
       operationId: listAudit
@@ -122,14 +247,51 @@ paths:
         "200": { description: Tenant audit records }
 components:
   securitySchemes:
-    tenant:
+    sessionCookie:
       type: apiKey
-      in: header
-      name: X-Tenant-ID
-    actor:
-      type: apiKey
-      in: header
-      name: X-Actor-ID
+      in: cookie
+      name: opportunity_session
+  schemas:
+    ProductVersionInput:
+      type: object
+      required: [input_schema, output_schema, capability_ids, workflow, metering, price_book, route_policy, delivery_mode, compliance_profile]
+      properties:
+        input_schema: { type: object, additionalProperties: true }
+        output_schema: { type: object, additionalProperties: true }
+        form_schema: { type: object, additionalProperties: true }
+        capability_ids: { type: array, minItems: 1, items: { type: string, format: uuid } }
+        workflow: { type: object, additionalProperties: true }
+        metering: { type: object, additionalProperties: true }
+        price_book: { type: object, additionalProperties: true }
+        route_policy: { type: object, additionalProperties: true }
+        delivery_mode: { type: string, enum: [workflow, realtime, async, provisioning, manual] }
+        compliance_profile: { type: object, additionalProperties: true }
+        growth_playbook: { type: object, additionalProperties: true }
+    ProductDetail:
+      type: object
+      required: [id, tenant_id, blueprint_id, name, status, version, versions, skus, publications]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        blueprint_id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string }
+        version: { type: integer }
+        versions: { type: array, items: { type: object, additionalProperties: true } }
+        skus: { type: array, items: { type: object, additionalProperties: true } }
+        publications: { type: array, items: { type: object, additionalProperties: true } }
+    Session:
+      type: object
+      required: [id, user_id, email, display_name, tenant_id, tenant_name, role, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        tenant_id: { type: string, format: uuid }
+        tenant_name: { type: string }
+        role: { type: string, enum: [admin, operator, reviewer, auditor] }
+        expires_at: { type: string, format: date-time }
   parameters:
     ObjectID:
       in: path
@@ -142,5 +304,4 @@ components:
       required: true
       schema: { type: string, minLength: 1 }
 security:
-  - tenant: []
-    actor: []
+  - sessionCookie: []

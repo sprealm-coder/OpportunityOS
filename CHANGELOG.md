@@ -2,19 +2,16 @@
 
 ## Unreleased
 
-- Replaced the runtime in-memory opportunity store with PostgreSQL-backed pgx/sqlc repositories.
-- Added transaction-scoped command idempotency, persisted audit records, and persisted outbox events.
-- Added opportunity evidence, score, transition, review, incubation, and business-blueprint APIs.
-- Added PostgreSQL integration coverage for idempotency replay, tenant isolation, review, incubation, blueprint approval, audit, and outbox writes.
-- Connected operator-console to the real control-plane command flow and admin-web to persisted audit data.
-- Added deterministic development tenant seed data and expanded OpenAPI 0.2 contracts.
+### Added
 
-- Initialized the OpportunityOS monorepo and local infrastructure.
-- Added architecture records and ADRs for modularity, versioning, and ledger rules.
-- Added the first neutral, executable core domain slice with tests.
-- Added two PostgreSQL migrations, idempotent neutral seed data, explicit SQL, sqlc configuration, and OpenAPI foundations.
-- Implemented tenant-scoped opportunity commands, audit/outbox/inbox contracts, all required lifecycle maps, controlled workflow DAG execution, schema validation, metering, integer pricing, provider routing, product publication checks, version-bound orders, Adapter contracts, and a balanced append-only ledger.
-- Added HMAC webhook replay protection and public-address URL validation for crawler SSRF boundaries.
-- Added seven runnable Next.js portals, with Tailwind-enabled admin and operator consoles plus shared typed contracts and UI.
-- Added typed Python intelligence and crawler worker foundations with passing security tests.
-- Verified the neutral end-to-end chain from opportunity evidence through publication, proof, order, execution, usage, charge, ledger, commission, settlement, and outcome feedback.
+- PostgreSQL-backed Cookie sessions, role-derived permissions, tenant RLS, and authenticated admin/operator portals.
+- Leased Outbox delivery with retry/dead-letter handling, Redis Streams adapter checks, and persisted Inbox deduplication.
+- Capability, Provider, and ProviderEndpoint runtime APIs.
+- Product, immutable ProductVersion, SKU, SKUVersion, binding, and Publication migrations and repositories.
+- Publication readiness checks for schema, workflow, provider availability, SKU bindings, metering, pricing, routing, delivery, and compliance.
+- Operator product factory for resource setup, blueprint approval, version configuration, SKU binding, and publication.
+
+### Changed
+
+- Browser clients now derive tenant and actor from trusted sessions instead of request headers.
+- The next development boundary advances to persistent quote, order, subscription, entitlement, execution, and delivery workflows.

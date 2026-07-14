@@ -7,20 +7,26 @@ import (
 )
 
 type MeteringDefinition struct {
-	ID, TenantID, Name, Unit, Field string
-	Version                         int
+	ID       string `json:"id"`
+	TenantID string `json:"tenant_id"`
+	Name     string `json:"name"`
+	Unit     string `json:"unit"`
+	Field    string `json:"field"`
+	Version  int    `json:"version"`
 }
 type Rule struct {
-	ID            string
-	Kind          string
-	FlatMinor     int64
-	UnitMinor     int64
-	IncludedUnits int64
+	ID            string `json:"id"`
+	Kind          string `json:"kind"`
+	FlatMinor     int64  `json:"flat_minor"`
+	UnitMinor     int64  `json:"unit_minor"`
+	IncludedUnits int64  `json:"included_units"`
 }
 type PriceBook struct {
-	ID, TenantID, Currency string
-	Version                int
-	Rules                  []Rule
+	ID       string `json:"id"`
+	TenantID string `json:"tenant_id"`
+	Currency string `json:"currency"`
+	Version  int    `json:"version"`
+	Rules    []Rule `json:"rules"`
 }
 
 func (m MeteringDefinition) Validate() error {

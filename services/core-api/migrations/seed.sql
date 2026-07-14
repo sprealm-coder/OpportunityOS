@@ -26,3 +26,24 @@ VALUES (
   'Development Brand'
 )
 ON CONFLICT DO NOTHING;
+
+INSERT INTO users (id, email, display_name, password_hash, status)
+VALUES (
+  '00000000-0000-4000-8000-000000000003',
+  'admin@opportunity.local',
+  'Development Admin',
+  '$2a$10$7uJeFJFr1e60KnchZwY1L.Bxy1t.rGKhb75K9NS8Ail2kSMmqM.cy',
+  'active'
+)
+ON CONFLICT (email) DO UPDATE SET
+  display_name = EXCLUDED.display_name,
+  password_hash = EXCLUDED.password_hash,
+  status = EXCLUDED.status;
+
+INSERT INTO memberships (tenant_id, user_id, role)
+VALUES (
+  '00000000-0000-4000-8000-000000000001',
+  '00000000-0000-4000-8000-000000000003',
+  'admin'
+)
+ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role;
