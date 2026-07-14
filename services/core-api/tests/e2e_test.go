@@ -151,9 +151,10 @@ func TestNeutralEndToEnd(t *testing.T) {
 	checkpoints = append(checkpoints, "proof_artifact")
 
 	deal := growth.Deal{ID: platform.NewID("deal"), TenantID: scope.TenantID, LeadID: lead.ID, Status: "proposal", ValueMinor: charge.Minor, Currency: charge.Currency}
-	quote := growth.Quote{ID: platform.NewID("quote"), TenantID: scope.TenantID, DealID: deal.ID, PriceVersionID: priceBook.ID, Status: "accepted", AmountMinor: charge.Minor, Currency: charge.Currency}
+	quoteVersion := order.QuoteVersion{ID: platform.NewID("quote-version"), TenantID: scope.TenantID, Version: 1, AmountMinor: charge.Minor, Currency: charge.Currency, Items: []order.QuoteItem{{Quantity: 1, AmountMinor: charge.Minor, Bindings: order.VersionBindings{ProductVersionID: productVersion.ID, SKUVersionID: skuVersion.ID, PricingVersionID: priceBook.ID, WorkflowVersionID: definition.ID, RoutingVersionID: policy.ID}}}}
+	quote := order.Quote{ID: platform.NewID("quote"), TenantID: scope.TenantID, DealID: deal.ID, CustomerID: "Test Customer", Status: "accepted", Version: 1, Versions: []order.QuoteVersion{quoteVersion}}
 	bindings := order.VersionBindings{ProductVersionID: productVersion.ID, SKUVersionID: skuVersion.ID, PricingVersionID: priceBook.ID, WorkflowVersionID: definition.ID, RoutingVersionID: policy.ID, ContractVersionID: "test-contract-v1"}
-	customerOrder, err := order.New(scope.TenantID, "Test Customer", "order-e2e", charge.Currency, quote.AmountMinor, bindings)
+	customerOrder, err := order.New(scope.TenantID, "Test Customer", "order-e2e", charge.Currency, quote.Versions[0].AmountMinor, bindings)
 	must(t, err)
 	for _, target := range []string{"awaiting_payment", "paid", "provisioning", "active"} {
 		must(t, customerOrder.Transition(target))

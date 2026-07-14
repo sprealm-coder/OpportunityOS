@@ -75,6 +75,19 @@ func newHandler(store application.Store, allowHeaderAuth bool) http.Handler {
 			r.With(server.requirePermission(permission.ProductWrite)).Post("/products/{id}/skus", server.createSKU)
 			r.With(server.requirePermission(permission.ProductWrite)).Post("/skus/{id}/versions", server.createSKUVersion)
 			r.With(server.requirePermission(permission.ProductPublish)).Post("/products/{id}/publications", server.publishProduct)
+			r.With(server.requirePermission(permission.TransactionRead)).Get("/quotes", server.listQuotes)
+			r.With(server.requirePermission(permission.QuoteWrite)).Post("/quotes", server.createQuote)
+			r.With(server.requirePermission(permission.TransactionRead)).Get("/quotes/{id}", server.getQuote)
+			r.With(server.requirePermission(permission.QuoteWrite)).Post("/quotes/{id}/transitions", server.transitionQuote)
+			r.With(server.requirePermission(permission.TransactionRead)).Get("/orders", server.listOrders)
+			r.With(server.requirePermission(permission.OrderWrite)).Post("/orders", server.createOrder)
+			r.With(server.requirePermission(permission.TransactionRead)).Get("/orders/{id}", server.getOrder)
+			r.With(server.requirePermission(permission.OrderWrite)).Post("/orders/{id}/transitions", server.transitionOrder)
+			r.With(server.requirePermission(permission.ExecutionWrite)).Post("/executions/{id}/transitions", server.transitionExecution)
+			r.With(server.requirePermission(permission.ExecutionWrite)).Post("/deliveries/{id}/transitions", server.transitionDelivery)
+			r.With(server.requirePermission(permission.BillingWrite)).Post("/executions/{id}/usage", server.recordUsage)
+			r.With(server.requirePermission(permission.BillingWrite)).Post("/executions/{id}/provider-costs", server.recordProviderCost)
+			r.With(server.requirePermission(permission.BillingWrite)).Post("/executions/{id}/customer-charges", server.createCustomerCharge)
 			r.With(server.requirePermission(permission.AuditRead)).Get("/audit", server.listAudit)
 		})
 	})
@@ -804,6 +817,353 @@ func (s *Server) publishProduct(w http.ResponseWriter, r *http.Request) {
 	item, err := s.store.PublishProduct(r.Context(), tenantScope, chi.URLParam(r, "id"), input.ProductVersionID, requestID)
 	if err != nil {
 		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) transactionStore() (application.TransactionStore, error) {
+	store, ok := s.store.(application.TransactionStore)
+	if !ok {
+		return nil, platform.Invalid("feature_unavailable", "transaction persistence is not configured")
+	}
+	return store, nil
+}
+
+func (s *Server) createQuote(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	var input application.QuoteInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.CreateQuote(r.Context(), tenantScope, input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) listQuotes(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	items, err := store.ListQuotes(r.Context(), tenantScope)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) getQuote(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	item, err := store.GetQuote(r.Context(), tenantScope, chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) transitionQuote(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	var input struct {
+		To string `json:"to"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.TransitionQuote(r.Context(), tenantScope, chi.URLParam(r, "id"), input.To, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) createOrder(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	var input struct {
+		QuoteVersionID string `json:"quote_version_id"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.CreateOrder(r.Context(), tenantScope, input.QuoteVersionID, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) listOrders(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	items, err := store.ListOrders(r.Context(), tenantScope)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) getOrder(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	item, err := store.GetOrder(r.Context(), tenantScope, chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, r, http.StatusNotFound, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) transitionOrder(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	var input struct {
+		To string `json:"to"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.TransitionOrder(r.Context(), tenantScope, chi.URLParam(r, "id"), input.To, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) transitionExecution(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	var input application.ExecutionTransitionInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.TransitionExecution(r.Context(), tenantScope, chi.URLParam(r, "id"), input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) transitionDelivery(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	var input struct {
+		To string `json:"to"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.TransitionDelivery(r.Context(), tenantScope, chi.URLParam(r, "id"), input.To, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) recordUsage(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	var input struct {
+		Quantity   int64     `json:"quantity"`
+		OccurredAt time.Time `json:"occurred_at"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.RecordUsage(r.Context(), tenantScope, chi.URLParam(r, "id"), input.Quantity, input.OccurredAt, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) recordProviderCost(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	var input struct {
+		ProviderEndpointID string `json:"provider_endpoint_id"`
+		Currency           string `json:"currency"`
+		AmountMinor        int64  `json:"amount_minor"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.RecordProviderCost(r.Context(), tenantScope, chi.URLParam(r, "id"), input.ProviderEndpointID, input.Currency, input.AmountMinor, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) createCustomerCharge(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	store, err := s.transactionStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	item, err := store.CreateCustomerCharge(r.Context(), tenantScope, chi.URLParam(r, "id"), requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, item)

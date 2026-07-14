@@ -2,6 +2,7 @@ package pricing
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/platform"
 )
@@ -64,15 +65,23 @@ func (p PriceBook) Calculate(quantity int64) (platform.Money, error) {
 	}
 	var total int64
 	for _, rule := range p.Rules {
+		var amount int64
 		switch rule.Kind {
 		case "flat":
-			total += rule.FlatMinor
+			amount = rule.FlatMinor
 		case "per_unit":
 			billable := quantity - rule.IncludedUnits
 			if billable > 0 {
-				total += billable * rule.UnitMinor
+				if rule.UnitMinor > 0 && billable > math.MaxInt64/rule.UnitMinor {
+					return platform.Money{}, fmt.Errorf("calculated amount exceeds supported range")
+				}
+				amount = billable * rule.UnitMinor
 			}
 		}
+		if amount > math.MaxInt64-total {
+			return platform.Money{}, fmt.Errorf("calculated amount exceeds supported range")
+		}
+		total += amount
 	}
 	return platform.Money{Currency: p.Currency, Minor: total}, nil
 }

@@ -83,6 +83,11 @@ var Order = New("order", map[string][]string{
 	"refund_pending":   {"refunded", "disputed"},
 })
 
+var Quote = New("quote", map[string][]string{
+	"draft": {"sent", "accepted", "cancelled"},
+	"sent":  {"accepted", "rejected", "expired", "cancelled"},
+})
+
 var Execution = New("execution", map[string][]string{
 	"created":     {"validating", "cancelled"},
 	"validating":  {"reserved", "failed", "cancelled"},
@@ -94,6 +99,13 @@ var Execution = New("execution", map[string][]string{
 	"failed":      {"reconciling"},
 	"cancelled":   {"reconciling"},
 	"reconciling": {"settled"},
+})
+
+var Delivery = New("delivery_project", map[string][]string{
+	"created":     {"in_progress", "cancelled"},
+	"in_progress": {"waiting", "completed", "failed", "cancelled"},
+	"waiting":     {"in_progress", "completed", "failed", "cancelled"},
+	"failed":      {"in_progress", "cancelled"},
 })
 
 var Lead = New("lead", map[string][]string{

@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"time"
 
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/audit"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/auth"
@@ -10,6 +11,7 @@ import (
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/catalog"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/incubation"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/opportunity"
+	orderdomain "github.com/opportunity-os/opportunity-os/services/core-api/internal/order"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/pricing"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/routing"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/schema"
@@ -52,6 +54,28 @@ type SKUVersionInput struct {
 	Entitlements     map[string]any `json:"entitlements"`
 }
 
+type QuoteItemInput struct {
+	SKUVersionID string         `json:"sku_version_id"`
+	Quantity     int64          `json:"quantity"`
+	Input        map[string]any `json:"input"`
+}
+
+type QuoteInput struct {
+	DealID     string           `json:"deal_id"`
+	CustomerID string           `json:"customer_id"`
+	Currency   string           `json:"currency"`
+	ValidUntil time.Time        `json:"valid_until"`
+	Items      []QuoteItemInput `json:"items"`
+}
+
+type ExecutionTransitionInput struct {
+	To                 string         `json:"to"`
+	ProviderEndpointID string         `json:"provider_endpoint_id"`
+	ExternalID         string         `json:"external_id"`
+	Output             map[string]any `json:"output"`
+	Error              map[string]any `json:"error"`
+}
+
 type Store interface {
 	CreateSession(context.Context, string, string) (auth.Session, error)
 	ResolveSession(context.Context, string) (auth.Session, error)
@@ -87,4 +111,21 @@ type Store interface {
 	CreateSKU(context.Context, tenancy.Scope, string, string, string, string) (catalog.SKU, error)
 	CreateSKUVersion(context.Context, tenancy.Scope, string, SKUVersionInput, string) (catalog.SKUVersion, error)
 	PublishProduct(context.Context, tenancy.Scope, string, string, string) (catalog.Publication, error)
+}
+
+type TransactionStore interface {
+	CreateQuote(context.Context, tenancy.Scope, QuoteInput, string) (orderdomain.Quote, error)
+	ListQuotes(context.Context, tenancy.Scope) ([]orderdomain.Quote, error)
+	GetQuote(context.Context, tenancy.Scope, string) (orderdomain.Quote, error)
+	TransitionQuote(context.Context, tenancy.Scope, string, string, string) (orderdomain.Quote, error)
+
+	CreateOrder(context.Context, tenancy.Scope, string, string) (orderdomain.Order, error)
+	ListOrders(context.Context, tenancy.Scope) ([]orderdomain.Order, error)
+	GetOrder(context.Context, tenancy.Scope, string) (orderdomain.Order, error)
+	TransitionOrder(context.Context, tenancy.Scope, string, string, string) (orderdomain.Order, error)
+	TransitionExecution(context.Context, tenancy.Scope, string, ExecutionTransitionInput, string) (orderdomain.ExecutionOrder, error)
+	TransitionDelivery(context.Context, tenancy.Scope, string, string, string) (orderdomain.DeliveryProject, error)
+	RecordUsage(context.Context, tenancy.Scope, string, int64, time.Time, string) (orderdomain.UsageRecord, error)
+	RecordProviderCost(context.Context, tenancy.Scope, string, string, string, int64, string) (orderdomain.ProviderCost, error)
+	CreateCustomerCharge(context.Context, tenancy.Scope, string, string) (orderdomain.CustomerCharge, error)
 }

@@ -3,6 +3,7 @@ package growth
 import (
 	"time"
 
+	orderdomain "github.com/opportunity-os/opportunity-os/services/core-api/internal/order"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/platform"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/state"
 )
@@ -29,11 +30,7 @@ type Deal struct {
 	ValueMinor                   int64
 	Currency                     string
 }
-type Quote struct {
-	ID, TenantID, DealID, PriceVersionID, Status string
-	AmountMinor                                  int64
-	Currency                                     string
-}
+type Quote = orderdomain.Quote
 
 var proofTypes = map[string]bool{"report": true, "sample": true, "comparison": true, "prototype": true, "analysis": true, "audit": true, "simulation": true, "document": true, "media": true, "custom": true}
 

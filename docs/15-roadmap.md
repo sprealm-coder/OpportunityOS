@@ -16,11 +16,16 @@
 - [x] Bind product versions to JSON Schema, controlled workflow, metering, integer pricing, routing, growth, delivery, and compliance definitions.
 - [x] Enforce publication readiness with healthy-provider and SKU-version gates.
 - [x] Connect the operator product factory to authenticated product configuration and publication commands.
+- [x] Persist Quote, immutable QuoteVersion, and server-priced quote line bindings.
+- [x] Persist Order and OrderItem snapshots bound to published ProductVersion, SKUVersion, Workflow, Pricing, and Routing records.
+- [x] Create Subscription, Entitlement, ExecutionOrder, and DeliveryProject records atomically at the provisioning boundary.
+- [x] Persist controlled execution/delivery transitions and separate Usage, ProviderCost, and CustomerCharge facts.
+- [x] Connect the operator transaction workspace to authenticated quote-to-fulfillment commands.
 
 ## First-release scope retained
 
-The remaining parts of phases C-H remain in scope: supplier contracts and quality, transaction/execution persistence, finance persistence, growth, reseller/supplier/marketplace workflows, and production end-to-end hardening.
+The remaining parts of phases C-H remain in scope: supplier contracts and quality, finance persistence, growth, reseller/supplier/marketplace workflows, and production end-to-end hardening.
 
 ## Next development task
 
-Implement phase D persistence on the authenticated/RLS-aware repository boundary: Quote/QuoteVersion, Order/OrderItem, Subscription, Entitlement, ExecutionOrder and DeliveryProject. Bind every order to immutable ProductVersion, SKUVersion, Workflow, Pricing and Routing versions, with transactional audit/Outbox and repository integration tests.
+Implement phase E persistence on the authenticated/RLS-aware repository boundary: Wallet, LedgerAccount, append-only LedgerTransaction/LedgerEntry, Hold, Release, Charge posting, Refund, Commission, ProviderPayable, Settlement, and Reconciliation. Connect calculated CustomerCharge and ProviderCost facts to balanced, idempotent ledger commands without merging operational facts into accounting entries.

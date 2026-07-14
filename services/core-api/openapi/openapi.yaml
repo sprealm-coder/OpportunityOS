@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpportunityOS Core API
-  version: 0.3.0
+  version: 0.4.0
 servers:
   - url: http://127.0.0.1:8080
 paths:
@@ -240,6 +240,141 @@ paths:
       responses:
         "201": { description: Product version published }
         "409": { description: Publication readiness check failed }
+  /v1/quotes:
+    get:
+      operationId: listQuotes
+      responses:
+        "200": { description: Tenant quote collection with immutable versions }
+    post:
+      operationId: createQuote
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteInput" }
+      responses:
+        "201":
+          description: Draft quote with server-calculated immutable version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+        "422": { description: SKU is unpublished, version bindings mismatch, or pricing failed }
+  /v1/quotes/{id}:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }]
+    get:
+      operationId: getQuote
+      responses:
+        "200":
+          description: Quote with immutable versions and line bindings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quote" }
+        "404": { description: Quote not found in tenant }
+  /v1/quotes/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionQuote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to: { type: string, enum: [sent, accepted, rejected, expired, cancelled] }
+      responses:
+        "200": { description: Quote transitioned by domain command }
+        "409": { description: Invalid transition or expired quote }
+  /v1/orders:
+    get:
+      operationId: listOrders
+      responses:
+        "200": { description: Tenant orders with fulfillment and operational facts }
+    post:
+      operationId: createOrder
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quote_version_id]
+              properties:
+                quote_version_id: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Order created from latest accepted quote version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "409": { description: Quote is unaccepted, expired, or stale }
+  /v1/orders/{id}:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }]
+    get:
+      operationId: getOrder
+      responses:
+        "200":
+          description: Order aggregate with items, subscriptions, entitlements, executions, deliveries, usage, costs, and charges
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "404": { description: Order not found in tenant }
+  /v1/orders/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to: { type: string, enum: [awaiting_payment, paid, provisioning, active, completed, cancelled, refund_pending, refunded, disputed] }
+      responses:
+        "200": { description: Order transitioned; provisioning atomically creates fulfillment records }
+        "409": { description: Invalid transition or fulfillment prerequisite failed }
+  /v1/executions/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionExecution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExecutionTransitionInput" }
+      responses:
+        "200": { description: Execution transitioned by the controlled state machine }
+        "409": { description: Invalid transition or provider readiness failed }
+  /v1/deliveries/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionDelivery
+      responses:
+        "200": { description: Delivery project transitioned }
+        "409": { description: Execution has not succeeded or transition is invalid }
+  /v1/executions/{id}/usage:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: recordUsage
+      responses:
+        "201": { description: Usage fact recorded independently from cost and charge }
+  /v1/executions/{id}/provider-costs:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: recordProviderCost
+      responses:
+        "201": { description: Provider cost fact recorded }
+  /v1/executions/{id}/customer-charges:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: calculateCustomerCharge
+      responses:
+        "201": { description: Customer charge calculated from immutable pricing and recorded usage }
   /v1/audit:
     get:
       operationId: listAudit
@@ -252,6 +387,79 @@ components:
       in: cookie
       name: opportunity_session
   schemas:
+    QuoteInput:
+      type: object
+      required: [deal_id, customer_id, currency, valid_until, items]
+      properties:
+        deal_id: { type: string, minLength: 1 }
+        customer_id: { type: string, minLength: 1 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        valid_until: { type: string, format: date-time }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [sku_version_id, quantity, input]
+            properties:
+              sku_version_id: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1 }
+              input: { type: object, additionalProperties: true }
+    VersionBindings:
+      type: object
+      required: [product_version_id, sku_version_id, workflow_version_id, pricing_version_id, routing_version_id]
+      properties:
+        product_version_id: { type: string, format: uuid }
+        sku_version_id: { type: string, format: uuid }
+        workflow_version_id: { type: string, format: uuid }
+        pricing_version_id: { type: string, format: uuid }
+        routing_version_id: { type: string, format: uuid }
+        contract_version_id: { type: string }
+    Quote:
+      type: object
+      required: [id, tenant_id, deal_id, customer_id, status, version, versions]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        deal_id: { type: string }
+        customer_id: { type: string }
+        status: { type: string, enum: [draft, sent, accepted, rejected, expired, cancelled] }
+        version: { type: integer, minimum: 1 }
+        versions:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    ExecutionTransitionInput:
+      type: object
+      required: [to]
+      properties:
+        to: { type: string, enum: [validating, reserved, queued, submitted, processing, succeeded, failed, cancelled, reconciling, settled] }
+        provider_endpoint_id: { type: string, format: uuid }
+        external_id: { type: string }
+        output: { type: object, additionalProperties: true }
+        error: { type: object, additionalProperties: true }
+    Order:
+      type: object
+      required: [id, tenant_id, customer_id, quote_version_id, status, currency, amount_minor, version, items, subscriptions, entitlements, executions, deliveries, usage, provider_costs, customer_charges]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        customer_id: { type: string }
+        quote_version_id: { type: string, format: uuid }
+        status: { type: string }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        amount_minor: { type: integer, minimum: 0 }
+        version: { type: integer, minimum: 1 }
+        bindings: { $ref: "#/components/schemas/VersionBindings" }
+        items: { type: array, items: { type: object, additionalProperties: true } }
+        subscriptions: { type: array, items: { type: object, additionalProperties: true } }
+        entitlements: { type: array, items: { type: object, additionalProperties: true } }
+        executions: { type: array, items: { type: object, additionalProperties: true } }
+        deliveries: { type: array, items: { type: object, additionalProperties: true } }
+        usage: { type: array, items: { type: object, additionalProperties: true } }
+        provider_costs: { type: array, items: { type: object, additionalProperties: true } }
+        customer_charges: { type: array, items: { type: object, additionalProperties: true } }
     ProductVersionInput:
       type: object
       required: [input_schema, output_schema, capability_ids, workflow, metering, price_book, route_policy, delivery_mode, compliance_profile]

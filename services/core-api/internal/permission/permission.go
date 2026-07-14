@@ -25,6 +25,11 @@ const (
 	ProductRead         = "product.read"
 	ProductWrite        = "product.write"
 	ProductPublish      = "product.publish"
+	TransactionRead     = "transaction.read"
+	QuoteWrite          = "quote.write"
+	OrderWrite          = "order.write"
+	ExecutionWrite      = "execution.write"
+	BillingWrite        = "billing.write"
 )
 
 var rolePermissions = map[string]map[string]bool{
@@ -35,9 +40,11 @@ var rolePermissions = map[string]map[string]bool{
 		IncubationWrite: true, BlueprintRead: true, BlueprintWrite: true,
 		CapabilityRead: true, CapabilityWrite: true, ProviderRead: true, ProviderWrite: true,
 		ProductRead: true, ProductWrite: true, ProductPublish: true,
+		TransactionRead: true, QuoteWrite: true, OrderWrite: true,
+		ExecutionWrite: true, BillingWrite: true,
 	},
-	"reviewer": {OpportunityRead: true, OpportunityReview: true, ProductRead: true, AuditRead: true},
-	"auditor":  {OpportunityRead: true, IncubationRead: true, BlueprintRead: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, AuditRead: true},
+	"reviewer": {OpportunityRead: true, OpportunityReview: true, ProductRead: true, TransactionRead: true, AuditRead: true},
+	"auditor":  {OpportunityRead: true, IncubationRead: true, BlueprintRead: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, TransactionRead: true, AuditRead: true},
 }
 
 func RequireRole(role, required string) error {

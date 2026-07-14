@@ -81,6 +81,78 @@ export const ProductDetailSchema = ProductSchema.extend({
   versions: z.array(ProductVersionSchema).default([]), skus: z.array(SKUSchema).default([]),
   publications: z.array(PublicationSchema).default([])
 });
+export const VersionBindingsSchema = z.object({
+  product_version_id: z.string(), sku_version_id: z.string(), pricing_version_id: z.string(),
+  workflow_version_id: z.string(), routing_version_id: z.string(), contract_version_id: z.string().optional()
+});
+export const QuoteItemSchema = z.object({
+  id: z.string(), tenant_id: z.string(), quote_version_id: z.string(), quantity: z.number().int().positive(),
+  unit_amount_minor: z.number().int().nonnegative(), amount_minor: z.number().int().nonnegative(),
+  input: z.record(z.string(), z.unknown()), bindings: VersionBindingsSchema
+});
+export const QuoteVersionSchema = z.object({
+  id: z.string(), tenant_id: z.string(), quote_id: z.string(), version: z.number().int().positive(),
+  currency: z.string().length(3), amount_minor: z.number().int().nonnegative(), valid_until: z.string().datetime(),
+  created_by: z.string(), created_at: z.string().datetime(), items: z.array(QuoteItemSchema).default([])
+});
+export const QuoteSchema = z.object({
+  id: z.string(), tenant_id: z.string(), deal_id: z.string(), customer_id: z.string(), status: z.string(),
+  version: z.number().int().positive(), created_by: z.string(), created_at: z.string().datetime(),
+  updated_at: z.string().datetime(), versions: z.array(QuoteVersionSchema).default([])
+});
+export const OrderItemSchema = z.object({
+  id: z.string(), tenant_id: z.string(), order_id: z.string(), quantity: z.number().int().positive(),
+  unit_amount_minor: z.number().int().nonnegative(), amount_minor: z.number().int().nonnegative(),
+  input: z.record(z.string(), z.unknown()), bindings: VersionBindingsSchema
+});
+export const SubscriptionSchema = z.object({
+  id: z.string(), tenant_id: z.string(), order_id: z.string(), order_item_id: z.string(), customer_id: z.string(),
+  sku_version_id: z.string(), status: z.string(), starts_at: z.string().datetime().nullable().optional(),
+  ends_at: z.string().datetime().nullable().optional(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const EntitlementSchema = z.object({
+  id: z.string(), tenant_id: z.string(), order_id: z.string(), order_item_id: z.string(),
+  subscription_id: z.string().optional(), key: z.string(), value: z.unknown(), status: z.string(),
+  starts_at: z.string().datetime().nullable().optional(), ends_at: z.string().datetime().nullable().optional(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const ExecutionOrderSchema = z.object({
+  id: z.string(), tenant_id: z.string(), order_id: z.string(), order_item_id: z.string(), status: z.string(),
+  provider_endpoint_id: z.string().optional(), external_id: z.string().optional(), idempotency_key: z.string(),
+  created_by: z.string(), attempt: z.number().int().nonnegative(), input: z.record(z.string(), z.unknown()),
+  output: z.record(z.string(), z.unknown()), error: z.record(z.string(), z.unknown()), bindings: VersionBindingsSchema,
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const DeliveryProjectSchema = z.object({
+  id: z.string(), tenant_id: z.string(), order_id: z.string(), order_item_id: z.string(),
+  execution_order_id: z.string(), mode: z.string(), status: z.string(), assignee: z.string().optional(),
+  artifacts: z.array(z.record(z.string(), z.unknown())).default([]), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const UsageRecordSchema = z.object({
+  id: z.string(), tenant_id: z.string(), order_id: z.string(), order_item_id: z.string(),
+  execution_order_id: z.string(), meter_id: z.string(), idempotency_key: z.string(), created_by: z.string(),
+  quantity: z.number().int().nonnegative(), occurred_at: z.string().datetime(), created_at: z.string().datetime()
+});
+export const ProviderCostSchema = z.object({
+  id: z.string(), tenant_id: z.string(), order_id: z.string(), order_item_id: z.string(), execution_order_id: z.string(),
+  provider_endpoint_id: z.string(), currency: z.string().length(3), idempotency_key: z.string(), created_by: z.string(),
+  amount_minor: z.number().int().nonnegative(), created_at: z.string().datetime()
+});
+export const CustomerChargeSchema = z.object({
+  id: z.string(), tenant_id: z.string(), order_id: z.string(), order_item_id: z.string(), execution_order_id: z.string(),
+  price_book_id: z.string(), currency: z.string().length(3), status: z.string(), idempotency_key: z.string(),
+  created_by: z.string(), amount_minor: z.number().int().nonnegative(), created_at: z.string().datetime()
+});
+export const OrderSchema = z.object({
+  id: z.string(), tenant_id: z.string(), customer_id: z.string(), quote_version_id: z.string(), status: z.string(),
+  currency: z.string().length(3), idempotency_key: z.string(), amount_minor: z.number().int().nonnegative(),
+  version: z.number().int().positive(), bindings: VersionBindingsSchema, created_by: z.string(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime(), items: z.array(OrderItemSchema).default([]),
+  subscriptions: z.array(SubscriptionSchema).default([]), entitlements: z.array(EntitlementSchema).default([]),
+  executions: z.array(ExecutionOrderSchema).default([]), deliveries: z.array(DeliveryProjectSchema).default([]),
+  usage: z.array(UsageRecordSchema).default([]), provider_costs: z.array(ProviderCostSchema).default([]),
+  customer_charges: z.array(CustomerChargeSchema).default([])
+});
 
 export type Money = z.infer<typeof MoneySchema>;
 export type Evidence = z.infer<typeof EvidenceSchema>;
@@ -98,6 +170,19 @@ export type SKUVersion = z.infer<typeof SKUVersionSchema>;
 export type SKU = z.infer<typeof SKUSchema>;
 export type Publication = z.infer<typeof PublicationSchema>;
 export type ProductDetail = z.infer<typeof ProductDetailSchema>;
+export type VersionBindings = z.infer<typeof VersionBindingsSchema>;
+export type QuoteItem = z.infer<typeof QuoteItemSchema>;
+export type QuoteVersion = z.infer<typeof QuoteVersionSchema>;
+export type Quote = z.infer<typeof QuoteSchema>;
+export type OrderItem = z.infer<typeof OrderItemSchema>;
+export type Subscription = z.infer<typeof SubscriptionSchema>;
+export type Entitlement = z.infer<typeof EntitlementSchema>;
+export type ExecutionOrder = z.infer<typeof ExecutionOrderSchema>;
+export type DeliveryProject = z.infer<typeof DeliveryProjectSchema>;
+export type UsageRecord = z.infer<typeof UsageRecordSchema>;
+export type ProviderCost = z.infer<typeof ProviderCostSchema>;
+export type CustomerCharge = z.infer<typeof CustomerChargeSchema>;
+export type Order = z.infer<typeof OrderSchema>;
 
 export type Collection<T> = { items: T[] };
 

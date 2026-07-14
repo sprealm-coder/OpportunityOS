@@ -8,9 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/application"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/auth"
+	orderdomain "github.com/opportunity-os/opportunity-os/services/core-api/internal/order"
+	"github.com/opportunity-os/opportunity-os/services/core-api/internal/tenancy"
 )
 
 func TestAPICookieSessionLifecycle(t *testing.T) {
@@ -192,5 +195,63 @@ func TestAPIOpportunityFlowAndSecurityHeaders(t *testing.T) {
 	}
 	if created["tenant_id"] != "tenant-a" {
 		t.Fatalf("unexpected tenant: %#v", created)
+	}
+}
+
+type transactionAPIStore struct {
+	application.Store
+	application.TransactionStore
+	quote orderdomain.Quote
+	order orderdomain.Order
+}
+
+func (s *transactionAPIStore) CreateQuote(_ context.Context, scope tenancy.Scope, input application.QuoteInput, _ string) (orderdomain.Quote, error) {
+	version := orderdomain.QuoteVersion{ID: "quote-version-api", TenantID: scope.TenantID, QuoteID: "quote-api", Version: 1, Currency: input.Currency, AmountMinor: 500, ValidUntil: input.ValidUntil, CreatedBy: scope.ActorID, CreatedAt: time.Now().UTC(), Items: []orderdomain.QuoteItem{}}
+	s.quote = orderdomain.Quote{ID: "quote-api", TenantID: scope.TenantID, DealID: input.DealID, CustomerID: input.CustomerID, Status: "draft", Version: 1, CreatedBy: scope.ActorID, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(), Versions: []orderdomain.QuoteVersion{version}}
+	return s.quote, nil
+}
+
+func (s *transactionAPIStore) ListQuotes(_ context.Context, _ tenancy.Scope) ([]orderdomain.Quote, error) {
+	return []orderdomain.Quote{s.quote}, nil
+}
+
+func (s *transactionAPIStore) TransitionQuote(_ context.Context, _ tenancy.Scope, _, to, _ string) (orderdomain.Quote, error) {
+	s.quote.Status = to
+	return s.quote, nil
+}
+
+func (s *transactionAPIStore) CreateOrder(_ context.Context, scope tenancy.Scope, quoteVersionID, key string) (orderdomain.Order, error) {
+	s.order = orderdomain.Order{ID: "order-api", TenantID: scope.TenantID, CustomerID: s.quote.CustomerID, QuoteVersionID: quoteVersionID, Status: "created", Currency: "USD", AmountMinor: 500, Version: 1, IdempotencyKey: key, CreatedBy: scope.ActorID, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(), Items: []orderdomain.OrderItem{}}
+	return s.order, nil
+}
+
+func (s *transactionAPIStore) ListOrders(_ context.Context, _ tenancy.Scope) ([]orderdomain.Order, error) {
+	return []orderdomain.Order{s.order}, nil
+}
+
+func TestAPITransactionRoutes(t *testing.T) {
+	store := &transactionAPIStore{Store: application.NewMemoryStore()}
+	server := newHandler(store, true)
+	validUntil := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	quote := apiCommand(t, server, http.MethodPost, "/v1/quotes", fmt.Sprintf(`{"deal_id":"Test Deal","customer_id":"Test Customer","currency":"USD","valid_until":%q,"items":[{"sku_version_id":"sku-version-api","quantity":1,"input":{"input":"Test Input"}}]}`, validUntil), "quote-api", http.StatusCreated)
+	if quote["status"] != "draft" {
+		t.Fatalf("quote status=%v", quote["status"])
+	}
+	quote = apiCommand(t, server, http.MethodPost, "/v1/quotes/quote-api/transitions", `{"to":"accepted"}`, "quote-accept-api", http.StatusOK)
+	if quote["status"] != "accepted" {
+		t.Fatalf("accepted quote status=%v", quote["status"])
+	}
+	createdOrder := apiCommand(t, server, http.MethodPost, "/v1/orders", `{"quote_version_id":"quote-version-api"}`, "order-api", http.StatusCreated)
+	if createdOrder["status"] != "created" || createdOrder["quote_version_id"] != "quote-version-api" {
+		t.Fatalf("unexpected order response: %#v", createdOrder)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/v1/orders", nil)
+	request.Header.Set("X-Tenant-ID", "tenant-api-flow")
+	request.Header.Set("X-Actor-ID", "actor-api-flow")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("order-api")) {
+		t.Fatalf("list orders status=%d body=%s", response.Code, response.Body.String())
 	}
 }

@@ -7,7 +7,7 @@ func TestRequiredStateMachines(t *testing.T) {
 		name     string
 		machine  Machine
 		from, to string
-	}{{"opportunity", Opportunity, "under_review", "approved"}, {"incubation", Incubation, "validating", "approved"}, {"blueprint", Blueprint, "configuring", "ready"}, {"product", Product, "ready", "published"}, {"lead", Lead, "proposal", "won"}, {"order", Order, "paid", "provisioning"}, {"execution", Execution, "processing", "succeeded"}, {"listing", Listing, "sandbox_testing", "limited_release"}}
+	}{{"opportunity", Opportunity, "under_review", "approved"}, {"incubation", Incubation, "validating", "approved"}, {"blueprint", Blueprint, "configuring", "ready"}, {"product", Product, "ready", "published"}, {"lead", Lead, "proposal", "won"}, {"quote", Quote, "sent", "accepted"}, {"order", Order, "paid", "provisioning"}, {"execution", Execution, "processing", "succeeded"}, {"delivery", Delivery, "in_progress", "completed"}, {"listing", Listing, "sandbox_testing", "limited_release"}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if err := test.machine.Transition(test.from, test.to); err != nil {
