@@ -115,6 +115,9 @@ importers:
 
   apps/marketplace-web:
     dependencies:
+      '@opportunity-os/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@opportunity-os/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -195,6 +198,9 @@ importers:
 
   apps/reseller-portal:
     dependencies:
+      '@opportunity-os/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@opportunity-os/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -220,6 +226,9 @@ importers:
 
   apps/supplier-portal:
     dependencies:
+      '@opportunity-os/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@opportunity-os/ui':
         specifier: workspace:*
         version: link:../../packages/ui

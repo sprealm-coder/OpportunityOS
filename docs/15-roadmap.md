@@ -31,11 +31,17 @@
 - [x] Separate growth operators from Proof/Campaign approvers and keep outbound delivery feature-gated.
 - [x] Connect the operator growth-sales workspace and admin governance view to authenticated APIs and shared Zod contracts.
 - [x] Verify the phase F PostgreSQL chain, idempotency, cross-tenant isolation, audit, Outbox, suppression blocking, and quota release.
+- [x] Persist Reseller levels, attribution, protected Lead/Customer ownership, independent transfers, canonical Commission locks, and settlement cycles.
+- [x] Persist Supplier capability/Provider ownership, independently approved contracts, integer rates, quality evidence, and canonical payable/settlement views.
+- [x] Persist Developer, Publisher, immutable ListingVersion, review, sandbox, quality, dispute, and takedown workflows under tenant RLS.
+- [x] Separate channel operators from ownership, supplier, marketplace, and takedown approvers with Store-level self-review guards.
+- [x] Connect authenticated reseller, supplier, and marketplace portals to Core API commands and shared Zod contracts.
+- [x] Verify the phase G PostgreSQL chain, idempotency, cross-tenant isolation, canonical finance reuse, release gates, audit, and Outbox.
 
 ## First-release scope retained
 
-The remaining parts of phases C-H remain in scope: supplier contracts and quality, reseller/supplier/developer marketplace workflows, outcome feedback, and production end-to-end hardening.
+Phase H remains in scope: neutral end-to-end integration across phases A-G, outcome feedback, operational observability, and production hardening.
 
 ## Next development task
 
-Implement phase G on the authenticated/RLS-aware repository boundary: Reseller, LeadOwnership, CustomerOwnership, attribution and protection periods, Supplier settlement/quality, Developer, Listing, Review, SandboxRun, Dispute, and Takedown. Reuse canonical Customer, Provider, payable, settlement, product, workflow, and ledger facts instead of creating parallel sources of truth.
+Implement phase H across the authenticated/RLS-aware boundary: run one neutral Source-to-OutcomeFeedback acceptance chain through opportunity, blueprint, product, growth, channel, transaction, execution, finance, marketplace governance, and analytics. Add workflow leases, trusted Adapter result ingress, operational replay/alerts, and production deployment checks without enabling external outreach or marketplace payouts.

@@ -125,6 +125,37 @@ func newHandler(store application.Store, allowHeaderAuth bool) http.Handler {
 			r.With(server.requirePermission(permission.DealWrite), server.requirePermission(permission.QuoteWrite)).Post("/deals/{id}/quotes", server.createDealQuote)
 			r.With(server.requirePermission(permission.ExperimentWrite)).Post("/experiments", server.createExperiment)
 			r.With(server.requirePermission(permission.ExperimentWrite)).Post("/experiments/{id}/transitions", server.transitionExperiment)
+			r.With(server.requirePermission(permission.ChannelRead)).Get("/channels", server.listChannels)
+			r.With(server.requirePermission(permission.ResellerWrite)).Post("/reseller-levels", server.createResellerLevel)
+			r.With(server.requirePermission(permission.ResellerWrite)).Post("/resellers", server.createReseller)
+			r.With(server.requirePermission(permission.ResellerWrite)).Post("/attribution-rules", server.createAttributionRule)
+			r.With(server.requirePermission(permission.OwnershipWrite)).Post("/lead-ownerships", server.assignLeadOwnership)
+			r.With(server.requirePermission(permission.OwnershipWrite)).Post("/customer-ownerships", server.createCustomerOwnership)
+			r.With(server.requirePermission(permission.OwnershipWrite)).Post("/ownership-transfers", server.createTransferRequest)
+			r.With(server.requirePermission(permission.OwnershipApprove)).Post("/ownership-transfers/{id}/reviews", server.reviewTransfer)
+			r.With(server.requirePermission(permission.ResellerWrite)).Post("/commission-rules", server.createCommissionRule)
+			r.With(server.requirePermission(permission.OwnershipWrite)).Post("/commission-locks", server.lockCommission)
+			r.With(server.requirePermission(permission.ResellerWrite)).Post("/settlement-cycles", server.createSettlementCycle)
+			r.With(server.requirePermission(permission.SupplierWrite)).Post("/suppliers", server.createSupplier)
+			r.With(server.requirePermission(permission.SupplierWrite)).Post("/suppliers/{id}/capabilities", server.bindSupplierCapability)
+			r.With(server.requirePermission(permission.SupplierWrite)).Post("/providers/{id}/supplier-binding", server.bindProviderSupplier)
+			r.With(server.requirePermission(permission.SupplierWrite)).Post("/supplier-contracts", server.createSupplierContract)
+			r.With(server.requirePermission(permission.SupplierWrite)).Post("/supplier-contracts/{id}/transitions", server.transitionSupplierContract)
+			r.With(server.requirePermission(permission.SupplierApprove)).Post("/supplier-contracts/{id}/reviews", server.reviewSupplierContract)
+			r.With(server.requirePermission(permission.SupplierWrite)).Post("/supplier-rates", server.createSupplierRate)
+			r.With(server.requirePermission(permission.SupplierWrite)).Post("/supplier-quality-records", server.recordSupplierQuality)
+			r.With(server.requirePermission(permission.MarketplaceWrite)).Post("/developers", server.createDeveloper)
+			r.With(server.requirePermission(permission.MarketplaceWrite)).Post("/publishers", server.createPublisher)
+			r.With(server.requirePermission(permission.MarketplaceWrite)).Post("/listings", server.createListing)
+			r.With(server.requirePermission(permission.MarketplaceWrite)).Post("/listings/{id}/versions", server.createListingVersion)
+			r.With(server.requirePermission(permission.MarketplaceWrite)).Post("/listings/{id}/transitions", server.transitionListing)
+			r.With(server.requirePermission(permission.MarketplaceReview)).Post("/listings/{id}/reviews", server.reviewListing)
+			r.With(server.requirePermission(permission.MarketplaceReview)).Post("/sandbox-runs", server.runSandbox)
+			r.With(server.requirePermission(permission.MarketplaceReview)).Post("/quality-scores", server.recordListingQuality)
+			r.With(server.requirePermission(permission.MarketplaceWrite)).Post("/marketplace-disputes", server.createMarketplaceDispute)
+			r.With(server.requirePermission(permission.MarketplaceReview)).Post("/marketplace-disputes/{id}/resolutions", server.resolveMarketplaceDispute)
+			r.With(server.requirePermission(permission.MarketplaceWrite)).Post("/takedowns", server.requestTakedown)
+			r.With(server.requirePermission(permission.MarketplaceTakedown)).Post("/takedowns/{id}/reviews", server.reviewTakedown)
 			r.With(server.requirePermission(permission.AuditRead)).Get("/audit", server.listAudit)
 		})
 	})
@@ -206,8 +237,18 @@ func (s *Server) cors(next http.Handler) http.Handler {
 	allowed := map[string]bool{
 		"http://127.0.0.1:3000": true,
 		"http://127.0.0.1:3001": true,
+		"http://127.0.0.1:3002": true,
+		"http://127.0.0.1:3003": true,
+		"http://127.0.0.1:3004": true,
+		"http://127.0.0.1:3005": true,
+		"http://127.0.0.1:3006": true,
 		"http://localhost:3000": true,
 		"http://localhost:3001": true,
+		"http://localhost:3002": true,
+		"http://localhost:3003": true,
+		"http://localhost:3004": true,
+		"http://localhost:3005": true,
+		"http://localhost:3006": true,
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")

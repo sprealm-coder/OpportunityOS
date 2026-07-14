@@ -25,10 +25,16 @@
 - Authenticated growth APIs, OpenAPI `0.6.0`, and shared TypeScript/Zod growth contracts.
 - Operator growth-sales workspace and admin growth-governance view; outbound delivery remains visibly disabled.
 - PostgreSQL phase F acceptance test covering Segment through canonical Quote and Experiment, including cross-tenant isolation and suppression-blocked outreach.
+- PostgreSQL migration `000010_channel_marketplace` for reseller ownership, supplier contract/quality, developer marketplace, disputes, and takedowns under RLS.
+- Reseller levels, versioned attribution, protected Lead/Customer ownership, independent transfer review, canonical CommissionLock, and settlement-cycle commands.
+- Supplier capability and Provider ownership, independently approved contract lifecycle, integer rates, quality evidence, and canonical ProviderPayable/Settlement projections.
+- Developer, Publisher, immutable ListingVersion, automatic/security/license/manual review, controlled sandbox, quality-gated release, dispute, and takedown commands.
+- Separated channel permissions, OpenAPI `0.7.0`, shared Zod contracts, and authenticated reseller, supplier, and marketplace portals.
+- Phase G PostgreSQL integration coverage for idempotency, cross-tenant isolation, four self-approval boundaries, audit, Outbox, canonical finance reuse, and Listing publication gates.
 
 ### Changed
 
 - Browser clients now derive tenant and actor from trusted sessions instead of request headers.
 - Growth Quote now aliases the canonical transaction-domain Quote instead of defining a duplicate model.
 - Orders now require sufficient active held funds before payment, and executions require posted charges and provider payables before settlement.
-- The next development boundary advances to phase G reseller ownership, supplier settlement, developer listing, review, sandbox, dispute, and takedown workflows.
+- The next development boundary advances to phase H neutral end-to-end integration, outcome feedback, and production hardening.

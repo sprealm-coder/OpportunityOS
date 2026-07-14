@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpportunityOS Core API
-  version: 0.6.0
+  version: 0.7.0
 servers:
   - url: http://127.0.0.1:8080
 paths:
@@ -618,6 +618,165 @@ paths:
       operationId: transitionGrowthExperiment
       responses:
         "200": { description: Experiment started, completed with results, or cancelled }
+  /v1/channels:
+    get:
+      operationId: listChannels
+      responses:
+        "200":
+          description: Tenant reseller, supplier, and internal marketplace overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChannelOverview" }
+  /v1/reseller-levels:
+    post:
+      operationId: createResellerLevel
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Reseller level created } }
+  /v1/resellers:
+    post:
+      operationId: createReseller
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Reseller created } }
+  /v1/attribution-rules:
+    post:
+      operationId: createAttributionRule
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Versioned attribution rule created } }
+  /v1/lead-ownerships:
+    post:
+      operationId: assignLeadOwnership
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Protected lead ownership assigned } }
+  /v1/customer-ownerships:
+    post:
+      operationId: createCustomerOwnership
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Customer ownership linked to canonical customer identifier } }
+  /v1/ownership-transfers:
+    post:
+      operationId: requestOwnershipTransfer
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Ownership transfer requested } }
+  /v1/ownership-transfers/{id}/reviews:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: reviewOwnershipTransfer
+      responses: { "200": { description: Transfer independently approved or rejected } }
+  /v1/commission-rules:
+    post:
+      operationId: createCommissionRule
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Reseller commission rule created } }
+  /v1/commission-locks:
+    post:
+      operationId: lockCanonicalCommission
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Existing canonical Commission locked to reseller attribution } }
+  /v1/settlement-cycles:
+    post:
+      operationId: createResellerSettlementCycle
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Reseller settlement cycle created without duplicating Settlement } }
+  /v1/suppliers:
+    post:
+      operationId: createSupplier
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Supplier created } }
+  /v1/suppliers/{id}/capabilities:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: bindSupplierCapability
+      responses: { "201": { description: Existing Capability bound to Supplier } }
+  /v1/providers/{id}/supplier-binding:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: bindProviderSupplier
+      responses: { "200": { description: Existing Provider assigned to canonical Supplier } }
+  /v1/supplier-contracts:
+    post:
+      operationId: createSupplierContract
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Supplier contract draft created } }
+  /v1/supplier-contracts/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionSupplierContract
+      responses: { "200": { description: Supplier contract transitioned; activation requires an active rate } }
+  /v1/supplier-contracts/{id}/reviews:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: reviewSupplierContract
+      responses: { "200": { description: Supplier contract independently approved or rejected } }
+  /v1/supplier-rates:
+    post:
+      operationId: createSupplierRate
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Integer supplier capability rate created } }
+  /v1/supplier-quality-records:
+    post:
+      operationId: recordSupplierQuality
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Supplier quality evidence recorded } }
+  /v1/developers:
+    post:
+      operationId: createDeveloper
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Internal marketplace developer created } }
+  /v1/publishers:
+    post:
+      operationId: createPublisher
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Developer publisher identity created } }
+  /v1/listings:
+    post:
+      operationId: createListing
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Internal marketplace Listing draft created } }
+  /v1/listings/{id}/versions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createListingVersion
+      responses: { "201": { description: Immutable ListingVersion created } }
+  /v1/listings/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionListing
+      responses: { "200": { description: Listing transitioned through review, sandbox, quality, and release gates } }
+  /v1/listings/{id}/reviews:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: reviewListing
+      responses: { "201": { description: Latest ListingVersion independently reviewed } }
+  /v1/sandbox-runs:
+    post:
+      operationId: recordSandboxRun
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Controlled sandbox result recorded; arbitrary uploaded code is not executed } }
+  /v1/quality-scores:
+    post:
+      operationId: recordListingQuality
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Listing quality score recorded } }
+  /v1/marketplace-disputes:
+    post:
+      operationId: createMarketplaceDispute
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Marketplace dispute created } }
+  /v1/marketplace-disputes/{id}/resolutions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: resolveMarketplaceDispute
+      responses: { "200": { description: Marketplace dispute independently resolved } }
+  /v1/takedowns:
+    post:
+      operationId: requestTakedown
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Auditable Listing takedown requested } }
+  /v1/takedowns/{id}/reviews:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: reviewTakedown
+      responses: { "200": { description: Takedown independently reviewed and approved removal executed } }
   /v1/audit:
     get:
       operationId: listAudit
@@ -630,6 +789,30 @@ components:
       in: cookie
       name: opportunity_session
   schemas:
+    ChannelOverview:
+      type: object
+      required: [reseller_levels, resellers, attribution_rules, lead_ownerships, customer_ownerships, transfer_requests, conflicts, commission_rules, commission_locks, settlement_cycles, suppliers, supplier_capabilities, provider_bindings, supplier_contracts, supplier_rates, supplier_quality, provider_payables, reseller_settlements, supplier_settlements, marketplace]
+      properties:
+        reseller_levels: { type: array, items: { type: object, additionalProperties: true } }
+        resellers: { type: array, items: { type: object, additionalProperties: true } }
+        attribution_rules: { type: array, items: { type: object, additionalProperties: true } }
+        lead_ownerships: { type: array, items: { type: object, additionalProperties: true } }
+        customer_ownerships: { type: array, items: { type: object, additionalProperties: true } }
+        transfer_requests: { type: array, items: { type: object, additionalProperties: true } }
+        conflicts: { type: array, items: { type: object, additionalProperties: true } }
+        commission_rules: { type: array, items: { type: object, additionalProperties: true } }
+        commission_locks: { type: array, items: { type: object, additionalProperties: true } }
+        settlement_cycles: { type: array, items: { type: object, additionalProperties: true } }
+        suppliers: { type: array, items: { type: object, additionalProperties: true } }
+        supplier_capabilities: { type: array, items: { type: object, additionalProperties: true } }
+        provider_bindings: { type: array, items: { type: object, additionalProperties: true } }
+        supplier_contracts: { type: array, items: { type: object, additionalProperties: true } }
+        supplier_rates: { type: array, items: { type: object, additionalProperties: true } }
+        supplier_quality: { type: array, items: { type: object, additionalProperties: true } }
+        provider_payables: { type: array, items: { type: object, additionalProperties: true } }
+        reseller_settlements: { type: array, items: { type: object, additionalProperties: true } }
+        supplier_settlements: { type: array, items: { type: object, additionalProperties: true } }
+        marketplace: { type: object, additionalProperties: true }
     FinanceOverview:
       type: object
       required: [wallets, accounts, transactions, holds, refunds, commissions, provider_payables, settlements, reconciliation_runs]

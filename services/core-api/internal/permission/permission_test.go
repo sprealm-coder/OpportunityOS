@@ -54,3 +54,25 @@ func TestGrowthApprovalSeparation(t *testing.T) {
 		t.Fatal("auditor received lead write permission")
 	}
 }
+
+func TestChannelApprovalSeparation(t *testing.T) {
+	for _, allowed := range []string{ChannelRead, ResellerWrite, OwnershipWrite, SupplierWrite, MarketplaceWrite} {
+		if err := RequireRole("operator", allowed); err != nil {
+			t.Fatalf("operator missing %s: %v", allowed, err)
+		}
+	}
+	for _, denied := range []string{OwnershipApprove, SupplierApprove, MarketplaceReview, MarketplaceTakedown} {
+		if err := RequireRole("operator", denied); err == nil {
+			t.Fatalf("operator received approval permission %s", denied)
+		}
+		if err := RequireRole("reviewer", denied); err != nil {
+			t.Fatalf("reviewer missing %s: %v", denied, err)
+		}
+	}
+	if err := RequireRole("auditor", ChannelRead); err != nil {
+		t.Fatal(err)
+	}
+	if err := RequireRole("auditor", MarketplaceWrite); err == nil {
+		t.Fatal("auditor received marketplace write permission")
+	}
+}

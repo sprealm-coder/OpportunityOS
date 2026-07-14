@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestOpenAPIFinanceContract(t *testing.T) {
+func TestOpenAPICommercialPlatformContract(t *testing.T) {
 	contents, err := os.ReadFile("openapi.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +22,7 @@ func TestOpenAPIFinanceContract(t *testing.T) {
 	if err = yaml.Unmarshal(contents, &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.OpenAPI != "3.1.0" || document.Info.Version != "0.6.0" {
+	if document.OpenAPI != "3.1.0" || document.Info.Version != "0.7.0" {
 		t.Fatalf("unexpected OpenAPI version: %s / %s", document.OpenAPI, document.Info.Version)
 	}
 	required := []string{
@@ -43,10 +43,18 @@ func TestOpenAPIFinanceContract(t *testing.T) {
 		"/v1/suppressions", "/v1/campaigns/{id}/outreach", "/v1/outreach/{id}/transitions",
 		"/v1/conversations", "/v1/conversations/{id}/messages", "/v1/deals", "/v1/deals/{id}",
 		"/v1/deals/{id}/transitions", "/v1/deals/{id}/quotes", "/v1/experiments", "/v1/experiments/{id}/transitions",
+		"/v1/channels", "/v1/reseller-levels", "/v1/resellers", "/v1/attribution-rules",
+		"/v1/lead-ownerships", "/v1/customer-ownerships", "/v1/ownership-transfers", "/v1/ownership-transfers/{id}/reviews",
+		"/v1/commission-rules", "/v1/commission-locks", "/v1/settlement-cycles",
+		"/v1/suppliers", "/v1/suppliers/{id}/capabilities", "/v1/providers/{id}/supplier-binding",
+		"/v1/supplier-contracts", "/v1/supplier-contracts/{id}/transitions", "/v1/supplier-contracts/{id}/reviews",
+		"/v1/supplier-rates", "/v1/supplier-quality-records", "/v1/developers", "/v1/publishers", "/v1/listings",
+		"/v1/listings/{id}/versions", "/v1/listings/{id}/transitions", "/v1/listings/{id}/reviews", "/v1/sandbox-runs", "/v1/quality-scores",
+		"/v1/marketplace-disputes", "/v1/marketplace-disputes/{id}/resolutions", "/v1/takedowns", "/v1/takedowns/{id}/reviews",
 	}
 	for _, path := range required {
 		if _, ok := document.Paths[path]; !ok {
-			t.Errorf("missing transaction path %s", path)
+			t.Errorf("missing platform path %s", path)
 		}
 	}
 }

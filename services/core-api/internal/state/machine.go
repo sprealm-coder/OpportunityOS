@@ -162,3 +162,11 @@ var Listing = New("listing", map[string][]string{
 	"published":        {"suspended", "removed"},
 	"suspended":        {"published", "removed"},
 })
+
+var SupplierContract = New("supplier_contract", map[string][]string{
+	"draft":            {"pending_approval", "terminated"},
+	"pending_approval": {"approved", "draft", "terminated"},
+	"approved":         {"active", "terminated"},
+	"active":           {"suspended", "expired", "terminated"},
+	"suspended":        {"active", "terminated"},
+})

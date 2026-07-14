@@ -114,6 +114,26 @@ func TestAPIRequiresTenantAndIdempotency(t *testing.T) {
 	}
 }
 
+func TestAPICORSAllowsWorkspacePortalsOnly(t *testing.T) {
+	server := New()
+	for _, origin := range []string{"http://127.0.0.1:3003", "http://127.0.0.1:3004", "http://127.0.0.1:3005"} {
+		request := httptest.NewRequest(http.MethodOptions, "/v1/channels", nil)
+		request.Header.Set("Origin", origin)
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != origin || response.Header().Get("Access-Control-Allow-Credentials") != "true" {
+			t.Fatalf("portal origin %s was not allowed: status=%d headers=%v", origin, response.Code, response.Header())
+		}
+	}
+	request := httptest.NewRequest(http.MethodOptions, "/v1/channels", nil)
+	request.Header.Set("Origin", "https://untrusted.example")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Fatalf("untrusted origin received CORS access: %v", response.Header())
+	}
+}
+
 func TestAPIControlPlaneFlow(t *testing.T) {
 	server := New()
 	created := apiCommand(t, server, http.MethodPost, "/v1/opportunities", `{"name":"API Flow","description":"Persistent control flow"}`, "create", http.StatusCreated)

@@ -304,6 +304,138 @@ export const GrowthOverviewSchema = z.object({
   conversations: z.array(ConversationSchema), deals: z.array(DealSchema), experiments: z.array(ExperimentSchema)
 });
 
+export const ResellerLevelSchema = z.object({
+  id: z.string(), tenant_id: z.string(), name: z.string(), rank: z.number().int().positive(),
+  default_commission_bps: z.number().int().min(0).max(10000), status: z.string(), created_by: z.string(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const ResellerSchema = z.object({
+  id: z.string(), tenant_id: z.string(), level_id: z.string().optional(), name: z.string(), status: z.string(),
+  created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const AttributionRuleSchema = z.object({
+  id: z.string(), tenant_id: z.string(), name: z.string(), priority: z.number().int().positive(),
+  definition: z.record(z.string(), z.unknown()), status: z.string(), version: z.number().int().positive(),
+  created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const LeadOwnershipSchema = z.object({
+  id: z.string(), tenant_id: z.string(), lead_id: z.string(), reseller_id: z.string(), attribution_rule_id: z.string(),
+  status: z.string(), protection_expires_at: z.string().datetime(), version: z.number().int().positive(),
+  created_by: z.string(), acquired_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const CustomerOwnershipSchema = z.object({
+  id: z.string(), tenant_id: z.string(), customer_id: z.string(), reseller_id: z.string(), source_lead_ownership_id: z.string().optional(),
+  status: z.string(), protection_expires_at: z.string().datetime(), version: z.number().int().positive(),
+  created_by: z.string(), acquired_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const TransferRequestSchema = z.object({
+  id: z.string(), tenant_id: z.string(), ownership_type: z.enum(["lead", "customer"]), ownership_id: z.string(),
+  from_reseller_id: z.string(), to_reseller_id: z.string(), status: z.string(), rationale: z.string(), requested_by: z.string(),
+  reviewed_by: z.string().optional(), version: z.number().int().positive(), created_at: z.string().datetime(), reviewed_at: z.string().datetime().optional()
+});
+export const ConflictRecordSchema = z.object({
+  id: z.string(), tenant_id: z.string(), ownership_type: z.string(), ownership_id: z.string(), claimant_reseller_ids: z.array(z.string()),
+  status: z.string(), resolution: z.record(z.string(), z.unknown()), created_by: z.string(), resolved_by: z.string().optional(),
+  created_at: z.string().datetime(), resolved_at: z.string().datetime().optional()
+});
+export const CommissionRuleSchema = z.object({
+  id: z.string(), tenant_id: z.string(), name: z.string(), reseller_id: z.string().optional(), reseller_level_id: z.string().optional(),
+  trigger_type: z.string(), basis_points: z.number().int().min(0).max(10000), status: z.string(), version: z.number().int().positive(),
+  effective_from: z.string().datetime(), effective_until: z.string().datetime().optional(), created_by: z.string(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const CommissionLockSchema = z.object({
+  id: z.string(), tenant_id: z.string(), customer_charge_id: z.string(), reseller_id: z.string(), commission_rule_id: z.string(),
+  commission_id: z.string().optional(), currency: z.string().length(3), amount_minor: z.number().int().positive(), status: z.string(),
+  idempotency_key: z.string(), created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const SettlementCycleSchema = z.object({
+  id: z.string(), tenant_id: z.string(), reseller_id: z.string(), name: z.string(), period_start: z.string().datetime(),
+  period_end: z.string().datetime(), status: z.string(), created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const SupplierSchema = z.object({
+  id: z.string(), tenant_id: z.string(), name: z.string(), status: z.string(), created_by: z.string(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const SupplierCapabilitySchema = z.object({
+  id: z.string(), tenant_id: z.string(), supplier_id: z.string(), capability_id: z.string(), status: z.string(), created_at: z.string().datetime()
+});
+export const ProviderSupplierBindingSchema = z.object({ provider_id: z.string(), provider_name: z.string(), supplier_id: z.string() });
+export const SupplierContractSchema = z.object({
+  id: z.string(), tenant_id: z.string(), supplier_id: z.string(), provider_id: z.string().optional(), name: z.string(), status: z.string(),
+  currency: z.string().length(3), terms: z.record(z.string(), z.unknown()), version: z.number().int().positive(),
+  starts_at: z.string().datetime().optional(), ends_at: z.string().datetime().optional(), created_by: z.string(), approved_by: z.string().optional(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const SupplierRateSchema = z.object({
+  id: z.string(), tenant_id: z.string(), contract_id: z.string(), capability_id: z.string(), unit: z.string(), rate_minor: z.number().int().nonnegative(),
+  version: z.number().int().positive(), status: z.string(), created_by: z.string(), created_at: z.string().datetime()
+});
+export const SupplierQualityRecordSchema = z.object({
+  id: z.string(), tenant_id: z.string(), supplier_id: z.string(), provider_id: z.string().optional(), provider_endpoint_id: z.string().optional(),
+  metric: z.string(), score_bps: z.number().int().min(0).max(10000), evidence: z.record(z.string(), z.unknown()),
+  period_start: z.string().datetime(), period_end: z.string().datetime(), created_by: z.string(), created_at: z.string().datetime()
+});
+export const DeveloperSchema = z.object({
+  id: z.string(), tenant_id: z.string(), name: z.string(), status: z.string(), created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const PublisherSchema = z.object({
+  id: z.string(), tenant_id: z.string(), developer_id: z.string(), name: z.string(), status: z.string(), created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const ListingVersionSchema = z.object({
+  id: z.string(), tenant_id: z.string(), listing_id: z.string(), version: z.number().int().positive(), capability_manifest: z.record(z.string(), z.unknown()),
+  permission_manifest: z.record(z.string(), z.unknown()), content_ref: z.string(), checksum: z.string(), created_by: z.string(), created_at: z.string().datetime()
+});
+export const ListingSchema = z.object({
+  id: z.string(), tenant_id: z.string(), publisher_id: z.string(), name: z.string(), listing_type: z.string(), status: z.string(),
+  version: z.number().int().positive(), created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime(), versions: z.array(ListingVersionSchema)
+});
+export const ListingReviewSchema = z.object({
+  id: z.string(), tenant_id: z.string(), listing_id: z.string(), listing_version_id: z.string(), review_type: z.string(), decision: z.string(),
+  rationale: z.string(), reviewed_by: z.string(), created_at: z.string().datetime()
+});
+export const SandboxRunSchema = z.object({
+  id: z.string(), tenant_id: z.string(), listing_version_id: z.string(), status: z.string(), created_by: z.string(),
+  policy: z.record(z.string(), z.unknown()), result: z.record(z.string(), z.unknown()), started_at: z.string().datetime(), completed_at: z.string().datetime().optional()
+});
+export const QualityScoreSchema = z.object({
+  id: z.string(), tenant_id: z.string(), listing_version_id: z.string(), score_bps: z.number().int().min(0).max(10000),
+  dimensions: z.record(z.string(), z.unknown()), created_by: z.string(), created_at: z.string().datetime()
+});
+export const IncidentRecordSchema = z.object({
+  id: z.string(), tenant_id: z.string(), listing_id: z.string(), severity: z.string(), summary: z.string(), status: z.string(), created_by: z.string(),
+  created_at: z.string().datetime(), resolved_at: z.string().datetime().optional()
+});
+export const RevenueShareRuleSchema = z.object({
+  id: z.string(), tenant_id: z.string(), listing_id: z.string(), publisher_id: z.string(), currency: z.string().length(3), status: z.string(),
+  created_by: z.string(), basis_points: z.number().int(), version: z.number().int(), created_at: z.string().datetime()
+});
+export const PayoutReserveSchema = z.object({
+  id: z.string(), tenant_id: z.string(), listing_id: z.string(), publisher_id: z.string(), currency: z.string().length(3), status: z.string(),
+  reference_type: z.string(), reference_id: z.string(), created_by: z.string(), amount_minor: z.number().int(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const MarketplaceDisputeSchema = z.object({
+  id: z.string(), tenant_id: z.string(), listing_id: z.string(), claimant_type: z.string(), claimant_id: z.string(), reason: z.string(), status: z.string(),
+  created_by: z.string(), resolved_by: z.string().optional(), resolution: z.record(z.string(), z.unknown()), created_at: z.string().datetime(), resolved_at: z.string().datetime().optional()
+});
+export const TakedownSchema = z.object({
+  id: z.string(), tenant_id: z.string(), listing_id: z.string(), reason: z.string(), status: z.string(), requested_by: z.string(), reviewed_by: z.string().optional(),
+  created_at: z.string().datetime(), reviewed_at: z.string().datetime().optional()
+});
+export const MarketplaceOverviewSchema = z.object({
+  developers: z.array(DeveloperSchema), publishers: z.array(PublisherSchema), listings: z.array(ListingSchema), reviews: z.array(ListingReviewSchema),
+  sandbox_runs: z.array(SandboxRunSchema), quality_scores: z.array(QualityScoreSchema), incidents: z.array(IncidentRecordSchema),
+  revenue_share_rules: z.array(RevenueShareRuleSchema), payout_reserves: z.array(PayoutReserveSchema), disputes: z.array(MarketplaceDisputeSchema), takedowns: z.array(TakedownSchema)
+});
+export const ChannelOverviewSchema = z.object({
+  reseller_levels: z.array(ResellerLevelSchema), resellers: z.array(ResellerSchema), attribution_rules: z.array(AttributionRuleSchema),
+  lead_ownerships: z.array(LeadOwnershipSchema), customer_ownerships: z.array(CustomerOwnershipSchema), transfer_requests: z.array(TransferRequestSchema), conflicts: z.array(ConflictRecordSchema),
+  commission_rules: z.array(CommissionRuleSchema), commission_locks: z.array(CommissionLockSchema), settlement_cycles: z.array(SettlementCycleSchema),
+  suppliers: z.array(SupplierSchema), supplier_capabilities: z.array(SupplierCapabilitySchema), provider_bindings: z.array(ProviderSupplierBindingSchema),
+  supplier_contracts: z.array(SupplierContractSchema), supplier_rates: z.array(SupplierRateSchema), supplier_quality: z.array(SupplierQualityRecordSchema),
+  provider_payables: z.array(ProviderPayableSchema), reseller_settlements: z.array(SettlementSchema), supplier_settlements: z.array(SettlementSchema), marketplace: MarketplaceOverviewSchema
+});
+
 export type Money = z.infer<typeof MoneySchema>;
 export type Evidence = z.infer<typeof EvidenceSchema>;
 export type Opportunity = z.infer<typeof OpportunitySchema>;
@@ -363,6 +495,31 @@ export type Conversation = z.infer<typeof ConversationSchema>;
 export type Deal = z.infer<typeof DealSchema>;
 export type Experiment = z.infer<typeof ExperimentSchema>;
 export type GrowthOverview = z.infer<typeof GrowthOverviewSchema>;
+export type ResellerLevel = z.infer<typeof ResellerLevelSchema>;
+export type Reseller = z.infer<typeof ResellerSchema>;
+export type AttributionRule = z.infer<typeof AttributionRuleSchema>;
+export type LeadOwnership = z.infer<typeof LeadOwnershipSchema>;
+export type CustomerOwnership = z.infer<typeof CustomerOwnershipSchema>;
+export type TransferRequest = z.infer<typeof TransferRequestSchema>;
+export type CommissionRule = z.infer<typeof CommissionRuleSchema>;
+export type CommissionLock = z.infer<typeof CommissionLockSchema>;
+export type SettlementCycle = z.infer<typeof SettlementCycleSchema>;
+export type Supplier = z.infer<typeof SupplierSchema>;
+export type SupplierCapability = z.infer<typeof SupplierCapabilitySchema>;
+export type SupplierContract = z.infer<typeof SupplierContractSchema>;
+export type SupplierRate = z.infer<typeof SupplierRateSchema>;
+export type SupplierQualityRecord = z.infer<typeof SupplierQualityRecordSchema>;
+export type Developer = z.infer<typeof DeveloperSchema>;
+export type Publisher = z.infer<typeof PublisherSchema>;
+export type ListingVersion = z.infer<typeof ListingVersionSchema>;
+export type Listing = z.infer<typeof ListingSchema>;
+export type ListingReview = z.infer<typeof ListingReviewSchema>;
+export type SandboxRun = z.infer<typeof SandboxRunSchema>;
+export type QualityScore = z.infer<typeof QualityScoreSchema>;
+export type MarketplaceDispute = z.infer<typeof MarketplaceDisputeSchema>;
+export type Takedown = z.infer<typeof TakedownSchema>;
+export type MarketplaceOverview = z.infer<typeof MarketplaceOverviewSchema>;
+export type ChannelOverview = z.infer<typeof ChannelOverviewSchema>;
 
 export type Collection<T> = { items: T[] };
 

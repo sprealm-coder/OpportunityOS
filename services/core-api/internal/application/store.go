@@ -9,9 +9,11 @@ import (
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/blueprint"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/capability"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/catalog"
+	"github.com/opportunity-os/opportunity-os/services/core-api/internal/channel"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/finance"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/growth"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/incubation"
+	"github.com/opportunity-os/opportunity-os/services/core-api/internal/marketplace"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/opportunity"
 	orderdomain "github.com/opportunity-os/opportunity-os/services/core-api/internal/order"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/pricing"
@@ -256,6 +258,166 @@ type ExperimentTransitionInput struct {
 	Result map[string]any `json:"result"`
 }
 
+type ResellerLevelInput struct {
+	Name                 string `json:"name"`
+	Rank                 int    `json:"rank"`
+	DefaultCommissionBPS int    `json:"default_commission_bps"`
+}
+
+type ResellerInput struct {
+	LevelID string `json:"level_id"`
+	Name    string `json:"name"`
+}
+
+type AttributionRuleInput struct {
+	Name       string         `json:"name"`
+	Priority   int            `json:"priority"`
+	Definition map[string]any `json:"definition"`
+}
+
+type LeadOwnershipInput struct {
+	LeadID            string `json:"lead_id"`
+	ResellerID        string `json:"reseller_id"`
+	AttributionRuleID string `json:"attribution_rule_id"`
+	ProtectionDays    int    `json:"protection_days"`
+}
+
+type CustomerOwnershipInput struct {
+	CustomerID            string `json:"customer_id"`
+	ResellerID            string `json:"reseller_id"`
+	SourceLeadOwnershipID string `json:"source_lead_ownership_id"`
+	ProtectionDays        int    `json:"protection_days"`
+}
+
+type TransferRequestInput struct {
+	OwnershipType string `json:"ownership_type"`
+	OwnershipID   string `json:"ownership_id"`
+	ToResellerID  string `json:"to_reseller_id"`
+	Rationale     string `json:"rationale"`
+}
+
+type ReviewInput struct {
+	Decision  string `json:"decision"`
+	Rationale string `json:"rationale"`
+}
+
+type CommissionRuleInput struct {
+	Name            string     `json:"name"`
+	ResellerID      string     `json:"reseller_id"`
+	ResellerLevelID string     `json:"reseller_level_id"`
+	BasisPoints     int        `json:"basis_points"`
+	EffectiveFrom   time.Time  `json:"effective_from"`
+	EffectiveUntil  *time.Time `json:"effective_until"`
+}
+
+type CommissionLockInput struct {
+	CommissionID     string `json:"commission_id"`
+	CommissionRuleID string `json:"commission_rule_id"`
+	ResellerID       string `json:"reseller_id"`
+}
+
+type SettlementCycleInput struct {
+	ResellerID  string    `json:"reseller_id"`
+	Name        string    `json:"name"`
+	PeriodStart time.Time `json:"period_start"`
+	PeriodEnd   time.Time `json:"period_end"`
+}
+
+type SupplierInput struct {
+	Name string `json:"name"`
+}
+
+type SupplierCapabilityInput struct {
+	SupplierID   string `json:"supplier_id"`
+	CapabilityID string `json:"capability_id"`
+}
+
+type ProviderSupplierInput struct {
+	SupplierID string `json:"supplier_id"`
+}
+
+type SupplierContractInput struct {
+	SupplierID string         `json:"supplier_id"`
+	ProviderID string         `json:"provider_id"`
+	Name       string         `json:"name"`
+	Currency   string         `json:"currency"`
+	Terms      map[string]any `json:"terms"`
+	StartsAt   *time.Time     `json:"starts_at"`
+	EndsAt     *time.Time     `json:"ends_at"`
+}
+
+type SupplierRateInput struct {
+	ContractID   string `json:"contract_id"`
+	CapabilityID string `json:"capability_id"`
+	Unit         string `json:"unit"`
+	RateMinor    int64  `json:"rate_minor"`
+}
+
+type SupplierQualityInput struct {
+	SupplierID         string         `json:"supplier_id"`
+	ProviderID         string         `json:"provider_id"`
+	ProviderEndpointID string         `json:"provider_endpoint_id"`
+	Metric             string         `json:"metric"`
+	ScoreBPS           int            `json:"score_bps"`
+	Evidence           map[string]any `json:"evidence"`
+	PeriodStart        time.Time      `json:"period_start"`
+	PeriodEnd          time.Time      `json:"period_end"`
+}
+
+type DeveloperInput struct {
+	Name string `json:"name"`
+}
+
+type PublisherInput struct {
+	DeveloperID string `json:"developer_id"`
+	Name        string `json:"name"`
+}
+
+type ListingInput struct {
+	PublisherID string `json:"publisher_id"`
+	Name        string `json:"name"`
+	ListingType string `json:"listing_type"`
+}
+type ListingVersionInput struct {
+	CapabilityManifest map[string]any `json:"capability_manifest"`
+	PermissionManifest map[string]any `json:"permission_manifest"`
+	ContentRef         string         `json:"content_ref"`
+	Checksum           string         `json:"checksum"`
+}
+type ListingReviewInput struct {
+	ListingVersionID string `json:"listing_version_id"`
+	ReviewType       string `json:"review_type"`
+	Decision         string `json:"decision"`
+	Rationale        string `json:"rationale"`
+}
+type SandboxRunInput struct {
+	ListingVersionID string         `json:"listing_version_id"`
+	Status           string         `json:"status"`
+	Policy           map[string]any `json:"policy"`
+	Result           map[string]any `json:"result"`
+}
+type ListingQualityInput struct {
+	ListingVersionID string         `json:"listing_version_id"`
+	ScoreBPS         int            `json:"score_bps"`
+	Dimensions       map[string]any `json:"dimensions"`
+}
+type MarketplaceDisputeInput struct {
+	ListingID    string `json:"listing_id"`
+	ClaimantType string `json:"claimant_type"`
+	ClaimantID   string `json:"claimant_id"`
+	Reason       string `json:"reason"`
+}
+
+type DisputeResolutionInput struct {
+	Decision   string         `json:"decision"`
+	Resolution map[string]any `json:"resolution"`
+}
+
+type TakedownInput struct {
+	ListingID string `json:"listing_id"`
+	Reason    string `json:"reason"`
+}
+
 type Store interface {
 	CreateSession(context.Context, string, string) (auth.Session, error)
 	ResolveSession(context.Context, string) (auth.Session, error)
@@ -350,4 +512,38 @@ type GrowthStore interface {
 	TransitionDeal(context.Context, tenancy.Scope, string, string, string) (growth.Deal, error)
 	CreateExperiment(context.Context, tenancy.Scope, ExperimentInput, string) (growth.Experiment, error)
 	TransitionExperiment(context.Context, tenancy.Scope, string, ExperimentTransitionInput, string) (growth.Experiment, error)
+}
+
+type ChannelStore interface {
+	ListChannels(context.Context, tenancy.Scope) (channel.Overview, error)
+	CreateResellerLevel(context.Context, tenancy.Scope, ResellerLevelInput, string) (channel.ResellerLevel, error)
+	CreateReseller(context.Context, tenancy.Scope, ResellerInput, string) (channel.Reseller, error)
+	CreateAttributionRule(context.Context, tenancy.Scope, AttributionRuleInput, string) (channel.AttributionRule, error)
+	AssignLeadOwnership(context.Context, tenancy.Scope, LeadOwnershipInput, string) (channel.LeadOwnership, error)
+	CreateCustomerOwnership(context.Context, tenancy.Scope, CustomerOwnershipInput, string) (channel.CustomerOwnership, error)
+	CreateTransferRequest(context.Context, tenancy.Scope, TransferRequestInput, string) (channel.TransferRequest, error)
+	ReviewTransfer(context.Context, tenancy.Scope, string, ReviewInput, string) (channel.TransferRequest, error)
+	CreateCommissionRule(context.Context, tenancy.Scope, CommissionRuleInput, string) (channel.CommissionRule, error)
+	LockCommission(context.Context, tenancy.Scope, CommissionLockInput, string) (channel.CommissionLock, error)
+	CreateSettlementCycle(context.Context, tenancy.Scope, SettlementCycleInput, string) (channel.SettlementCycle, error)
+	CreateSupplier(context.Context, tenancy.Scope, SupplierInput, string) (channel.Supplier, error)
+	BindSupplierCapability(context.Context, tenancy.Scope, SupplierCapabilityInput, string) (channel.SupplierCapability, error)
+	BindProviderSupplier(context.Context, tenancy.Scope, string, ProviderSupplierInput, string) (channel.Supplier, error)
+	CreateSupplierContract(context.Context, tenancy.Scope, SupplierContractInput, string) (channel.SupplierContract, error)
+	TransitionSupplierContract(context.Context, tenancy.Scope, string, string, string) (channel.SupplierContract, error)
+	ReviewSupplierContract(context.Context, tenancy.Scope, string, ReviewInput, string) (channel.SupplierContract, error)
+	CreateSupplierRate(context.Context, tenancy.Scope, SupplierRateInput, string) (channel.SupplierRate, error)
+	RecordSupplierQuality(context.Context, tenancy.Scope, SupplierQualityInput, string) (channel.SupplierQualityRecord, error)
+	CreateDeveloper(context.Context, tenancy.Scope, DeveloperInput, string) (marketplace.Developer, error)
+	CreatePublisher(context.Context, tenancy.Scope, PublisherInput, string) (marketplace.Publisher, error)
+	CreateListing(context.Context, tenancy.Scope, ListingInput, string) (marketplace.Listing, error)
+	CreateListingVersion(context.Context, tenancy.Scope, string, ListingVersionInput, string) (marketplace.ListingVersion, error)
+	TransitionListing(context.Context, tenancy.Scope, string, string, string) (marketplace.Listing, error)
+	ReviewListing(context.Context, tenancy.Scope, string, ListingReviewInput, string) (marketplace.Review, error)
+	RunSandbox(context.Context, tenancy.Scope, SandboxRunInput, string) (marketplace.SandboxRun, error)
+	RecordListingQuality(context.Context, tenancy.Scope, ListingQualityInput, string) (marketplace.QualityScore, error)
+	CreateMarketplaceDispute(context.Context, tenancy.Scope, MarketplaceDisputeInput, string) (marketplace.Dispute, error)
+	ResolveMarketplaceDispute(context.Context, tenancy.Scope, string, DisputeResolutionInput, string) (marketplace.Dispute, error)
+	RequestTakedown(context.Context, tenancy.Scope, TakedownInput, string) (marketplace.Takedown, error)
+	ReviewTakedown(context.Context, tenancy.Scope, string, ReviewInput, string) (marketplace.Takedown, error)
 }

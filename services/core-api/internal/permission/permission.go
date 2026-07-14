@@ -46,6 +46,15 @@ const (
 	OutreachWrite       = "outreach.write"
 	DealWrite           = "deal.write"
 	ExperimentWrite     = "experiment.write"
+	ChannelRead         = "channel.read"
+	ResellerWrite       = "reseller.write"
+	OwnershipWrite      = "ownership.write"
+	OwnershipApprove    = "ownership.approve"
+	SupplierWrite       = "supplier.write"
+	SupplierApprove     = "supplier.approve"
+	MarketplaceWrite    = "marketplace.write"
+	MarketplaceReview   = "marketplace.review"
+	MarketplaceTakedown = "marketplace.takedown"
 )
 
 var rolePermissions = map[string]map[string]bool{
@@ -62,9 +71,11 @@ var rolePermissions = map[string]map[string]bool{
 		SettlementWrite: true, ReconciliationWrite: true,
 		GrowthRead: true, GrowthWrite: true, LeadWrite: true, ProofWrite: true,
 		CampaignWrite: true, OutreachWrite: true, DealWrite: true, ExperimentWrite: true,
+		ChannelRead: true, ResellerWrite: true, OwnershipWrite: true,
+		SupplierWrite: true, MarketplaceWrite: true,
 	},
-	"reviewer": {OpportunityRead: true, OpportunityReview: true, ProductRead: true, TransactionRead: true, FinanceRead: true, GrowthRead: true, ProofReview: true, CampaignApprove: true, AuditRead: true},
-	"auditor":  {OpportunityRead: true, IncubationRead: true, BlueprintRead: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, TransactionRead: true, FinanceRead: true, GrowthRead: true, AuditRead: true},
+	"reviewer": {OpportunityRead: true, OpportunityReview: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, TransactionRead: true, FinanceRead: true, GrowthRead: true, ProofReview: true, CampaignApprove: true, ChannelRead: true, OwnershipApprove: true, SupplierApprove: true, MarketplaceReview: true, MarketplaceTakedown: true, AuditRead: true},
+	"auditor":  {OpportunityRead: true, IncubationRead: true, BlueprintRead: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, TransactionRead: true, FinanceRead: true, GrowthRead: true, ChannelRead: true, AuditRead: true},
 }
 
 func RequireRole(role, required string) error {
