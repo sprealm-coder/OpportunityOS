@@ -7,9 +7,14 @@ import (
 )
 
 type Project struct {
-	ID, TenantID, OpportunityID, Name, Status string
-	Version                                   int
-	CreatedAt, UpdatedAt                      time.Time
+	ID            string    `json:"id"`
+	TenantID      string    `json:"tenant_id"`
+	OpportunityID string    `json:"opportunity_id"`
+	Name          string    `json:"name"`
+	Status        string    `json:"status"`
+	Version       int       `json:"version"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 type Experiment struct {
 	ID, TenantID, ProjectID, Name, Hypothesis, Status string

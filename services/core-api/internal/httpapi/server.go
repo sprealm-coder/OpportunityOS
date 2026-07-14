@@ -11,28 +11,28 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/opportunity-os/opportunity-os/services/core-api/internal/audit"
+	"github.com/opportunity-os/opportunity-os/services/core-api/internal/application"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/opportunity"
-	"github.com/opportunity-os/opportunity-os/services/core-api/internal/outbox"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/platform"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/tenancy"
 )
 
 type Server struct {
-	opportunities *opportunity.Service
-	audit         *audit.Log
-	limiter       *rateLimiter
+	store   application.Store
+	limiter *rateLimiter
 }
 
 func New() http.Handler {
-	auditLog := &audit.Log{}
-	events := &outbox.Memory{}
-	service := opportunity.NewService(opportunity.NewMemoryRepository(), auditLog, events)
-	server := &Server{opportunities: service, audit: auditLog, limiter: newRateLimiter(120, time.Minute)}
+	return NewWithStore(application.NewMemoryStore())
+}
+
+func NewWithStore(store application.Store) http.Handler {
+	server := &Server{store: store, limiter: newRateLimiter(120, time.Minute)}
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(server.requestContext)
 	r.Use(server.securityHeaders)
+	r.Use(server.cors)
 	r.Use(server.limiter.Middleware)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "service": "core-api"})
@@ -45,6 +45,13 @@ func New() http.Handler {
 		r.Post("/opportunities/{id}/evidence", server.addEvidence)
 		r.Post("/opportunities/{id}/score", server.scoreOpportunity)
 		r.Post("/opportunities/{id}/transitions", server.transitionOpportunity)
+		r.Post("/opportunities/{id}/reviews", server.reviewOpportunity)
+		r.Post("/opportunities/{id}/incubations", server.createIncubation)
+		r.Post("/opportunities/{id}/blueprints", server.createBlueprint)
+		r.Get("/incubations", server.listIncubations)
+		r.Post("/incubations/{id}/transitions", server.transitionIncubation)
+		r.Get("/blueprints", server.listBlueprints)
+		r.Post("/blueprints/{id}/transitions", server.transitionBlueprint)
 		r.Get("/audit", server.listAudit)
 	})
 	return r
@@ -74,6 +81,29 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) cors(next http.Handler) http.Handler {
+	allowed := map[string]bool{
+		"http://127.0.0.1:3000": true,
+		"http://127.0.0.1:3001": true,
+		"http://localhost:3000": true,
+		"http://localhost:3001": true,
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if allowed[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key, X-Tenant-ID, X-Actor-ID, X-Request-ID, X-Trace-ID")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -114,7 +144,7 @@ func (s *Server) createOpportunity(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	item, err := s.opportunities.Create(tenantScope, input.Name, input.Description, requestID)
+	item, err := s.store.CreateOpportunity(r.Context(), tenantScope, input.Name, input.Description, requestID)
 	if err != nil {
 		writeError(w, r, http.StatusUnprocessableEntity, err)
 		return
@@ -127,7 +157,12 @@ func (s *Server) listOpportunities(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnauthorized, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": s.opportunities.List(tenantScope)})
+	items, err := s.store.ListOpportunities(r.Context(), tenantScope)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 func (s *Server) getOpportunity(w http.ResponseWriter, r *http.Request) {
 	tenantScope, err := scope(r)
@@ -135,7 +170,7 @@ func (s *Server) getOpportunity(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnauthorized, err)
 		return
 	}
-	item, err := s.opportunities.Get(tenantScope, chi.URLParam(r, "id"))
+	item, err := s.store.GetOpportunity(r.Context(), tenantScope, chi.URLParam(r, "id"))
 	if err != nil {
 		writeError(w, r, http.StatusNotFound, platform.Invalid("not_found", "opportunity not found"))
 		return
@@ -161,7 +196,7 @@ func (s *Server) addEvidence(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	item, err := s.opportunities.AddEvidence(tenantScope, chi.URLParam(r, "id"), opportunity.Evidence{Kind: input.Kind, Summary: input.Summary, Confidence: input.Confidence}, requestID)
+	item, err := s.store.AddEvidence(r.Context(), tenantScope, chi.URLParam(r, "id"), opportunity.Evidence{Kind: input.Kind, Summary: input.Summary, Confidence: input.Confidence}, requestID)
 	if err != nil {
 		writeError(w, r, http.StatusUnprocessableEntity, err)
 		return
@@ -185,7 +220,7 @@ func (s *Server) scoreOpportunity(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	item, err := s.opportunities.Score(tenantScope, chi.URLParam(r, "id"), input.Score, requestID)
+	item, err := s.store.ScoreOpportunity(r.Context(), tenantScope, chi.URLParam(r, "id"), input.Score, requestID)
 	if err != nil {
 		writeError(w, r, http.StatusUnprocessableEntity, err)
 		return
@@ -209,7 +244,7 @@ func (s *Server) transitionOpportunity(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
-	item, err := s.opportunities.Transition(tenantScope, chi.URLParam(r, "id"), input.To, requestID)
+	item, err := s.store.TransitionOpportunity(r.Context(), tenantScope, chi.URLParam(r, "id"), input.To, requestID)
 	if err != nil {
 		writeError(w, r, http.StatusConflict, err)
 		return
@@ -222,7 +257,185 @@ func (s *Server) listAudit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnauthorized, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": s.audit.ForTenant(tenantScope.TenantID)})
+	items, err := s.store.ListAudit(r.Context(), tenantScope)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) reviewOpportunity(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		Decision  string `json:"decision"`
+		Rationale string `json:"rationale"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.ReviewOpportunity(r.Context(), tenantScope, chi.URLParam(r, "id"), input.Decision, input.Rationale, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) createIncubation(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.CreateIncubation(r.Context(), tenantScope, chi.URLParam(r, "id"), input.Name, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) listIncubations(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	items, err := s.store.ListIncubations(r.Context(), tenantScope)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) transitionIncubation(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		To string `json:"to"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.TransitionIncubation(r.Context(), tenantScope, chi.URLParam(r, "id"), input.To, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) createBlueprint(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		Name                   string           `json:"name"`
+		Description            string           `json:"description"`
+		ValueProposition       string           `json:"value_proposition"`
+		RequiredCapabilities   []string         `json:"required_capabilities"`
+		ProductDefinitions     []map[string]any `json:"product_definitions"`
+		WorkflowDefinitions    []map[string]any `json:"workflow_definitions"`
+		MeteringDefinitions    []map[string]any `json:"metering_definitions"`
+		PricingDefinitions     []map[string]any `json:"pricing_definitions"`
+		ComplianceProfile      map[string]any   `json:"compliance_profile"`
+		BusinessModel          map[string]any   `json:"business_model"`
+		TargetMarketDefinition map[string]any   `json:"target_market_definition"`
+		RevenueModel           map[string]any   `json:"revenue_model"`
+		DeliveryModel          map[string]any   `json:"delivery_model"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.CreateBlueprint(r.Context(), tenantScope, chi.URLParam(r, "id"), application.BlueprintInput{
+		Name: input.Name, Description: input.Description, ValueProposition: input.ValueProposition,
+		RequiredCapabilities: input.RequiredCapabilities, ProductDefinitions: input.ProductDefinitions,
+		WorkflowDefinitions: input.WorkflowDefinitions, MeteringDefinitions: input.MeteringDefinitions,
+		PricingDefinitions: input.PricingDefinitions, ComplianceProfile: input.ComplianceProfile,
+		BusinessModel: input.BusinessModel, TargetMarketDefinition: input.TargetMarketDefinition,
+		RevenueModel: input.RevenueModel, DeliveryModel: input.DeliveryModel,
+	}, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) listBlueprints(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	items, err := s.store.ListBlueprints(r.Context(), tenantScope)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) transitionBlueprint(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var input struct {
+		To string `json:"to"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := s.store.TransitionBlueprint(r.Context(), tenantScope, chi.URLParam(r, "id"), input.To, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

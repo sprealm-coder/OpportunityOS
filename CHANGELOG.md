@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Replaced the runtime in-memory opportunity store with PostgreSQL-backed pgx/sqlc repositories.
+- Added transaction-scoped command idempotency, persisted audit records, and persisted outbox events.
+- Added opportunity evidence, score, transition, review, incubation, and business-blueprint APIs.
+- Added PostgreSQL integration coverage for idempotency replay, tenant isolation, review, incubation, blueprint approval, audit, and outbox writes.
+- Connected operator-console to the real control-plane command flow and admin-web to persisted audit data.
+- Added deterministic development tenant seed data and expanded OpenAPI 0.2 contracts.
+
 - Initialized the OpportunityOS monorepo and local infrastructure.
 - Added architecture records and ADRs for modularity, versioning, and ledger rules.
 - Added the first neutral, executable core domain slice with tests.

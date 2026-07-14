@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
@@ -16,10 +16,43 @@ function run(command, args, options = {}) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+function runPnpm(args, options = {}) {
+  run("corepack", ["pnpm", ...args], options);
+}
+
+function runConcurrent(processes) {
+  const children = processes.map(({ command, args, cwd = root }) => spawn(command, args, {
+    cwd,
+    env: process.env,
+    shell: isWindows,
+    stdio: "inherit"
+  }));
+  let stopping = false;
+  const stop = exitCode => {
+    if (stopping) return;
+    stopping = true;
+    children.forEach(child => {
+      if (!child.killed) child.kill();
+    });
+    process.exit(exitCode);
+  };
+  process.on("SIGINT", () => stop(130));
+  process.on("SIGTERM", () => stop(143));
+  children.forEach(child => {
+    child.on("error", error => {
+      console.error(error);
+      stop(1);
+    });
+    child.on("exit", code => {
+      if (!stopping) stop(code ?? 1);
+    });
+  });
+}
+
 const tasks = {
   setup() {
     if (!existsSync(join(root, ".env"))) copyFileSync(join(root, ".env.example"), join(root, ".env"));
-    run("pnpm", ["install", "--frozen-lockfile=false"]);
+    runPnpm(["install", "--frozen-lockfile=false"]);
     run("go", ["mod", "download"], { cwd: join(root, "services/core-api") });
   },
   migrate() {
@@ -29,22 +62,28 @@ const tasks = {
     run("go", ["run", "./cmd/migrate", "seed"], { cwd: join(root, "services/core-api") });
   },
   dev() {
-    run("docker", ["compose", "up", "-d", "postgres", "redis", "minio"]);
-    run("pnpm", ["--parallel", "--filter", "@opportunity-os/admin-web", "--filter", "@opportunity-os/operator-console", "dev"]);
+    run("docker", ["compose", "up", "-d", "postgres"]);
+    run("go", ["run", "./cmd/migrate", "up"], { cwd: join(root, "services/core-api") });
+    run("go", ["run", "./cmd/migrate", "seed"], { cwd: join(root, "services/core-api") });
+    runConcurrent([
+      { command: "go", args: ["run", "./cmd/api"], cwd: join(root, "services/core-api") },
+      { command: "corepack", args: ["pnpm", "--filter", "@opportunity-os/admin-web", "dev"] },
+      { command: "corepack", args: ["pnpm", "--filter", "@opportunity-os/operator-console", "dev"] }
+    ]);
   },
   test() {
     run("docker", ["compose", "up", "-d", "postgres"]);
     run("go", ["run", "./cmd/migrate", "up"], { cwd: join(root, "services/core-api") });
     run("go", ["test", "./..."], { cwd: join(root, "services/core-api") });
-    run("pnpm", ["-r", "--if-present", "test"]);
+    runPnpm(["-r", "--if-present", "test"]);
   },
   lint() {
     run("go", ["vet", "./..."], { cwd: join(root, "services/core-api") });
-    run("pnpm", ["-r", "--if-present", "typecheck"]);
+    runPnpm(["-r", "--if-present", "typecheck"]);
   },
   build() {
     run("go", ["build", "./..."], { cwd: join(root, "services/core-api") });
-    run("pnpm", ["-r", "--if-present", "build"]);
+    runPnpm(["-r", "--if-present", "build"]);
   },
   e2e() {
     run("docker", ["compose", "up", "-d", "postgres"]);

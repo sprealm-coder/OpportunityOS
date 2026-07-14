@@ -1,33 +1,146 @@
 openapi: 3.1.0
 info:
   title: OpportunityOS Core API
-  version: 0.1.0
+  version: 0.2.0
+servers:
+  - url: http://127.0.0.1:8080
 paths:
   /healthz:
     get:
       operationId: health
+      security: []
       responses:
         "200": { description: Healthy }
   /v1/opportunities:
     get:
       operationId: listOpportunities
-      security: [{ tenant: [] }]
       responses:
         "200": { description: Opportunity collection }
     post:
       operationId: createOpportunity
-      security: [{ tenant: [] }]
-      parameters:
-        - in: header
-          name: Idempotency-Key
-          required: true
-          schema: { type: string }
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1 }
+                description: { type: string }
       responses:
         "201": { description: Created }
+  /v1/opportunities/{id}:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }]
+    get:
+      operationId: getOpportunity
+      responses:
+        "200": { description: Opportunity with evidence }
+  /v1/opportunities/{id}/evidence:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: addOpportunityEvidence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, summary, confidence]
+              properties:
+                kind: { type: string }
+                summary: { type: string }
+                confidence: { type: integer, minimum: 0, maximum: 100 }
+      responses:
+        "200": { description: Evidence added }
+  /v1/opportunities/{id}/score:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: scoreOpportunity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [score]
+              properties:
+                score: { type: integer, minimum: 0, maximum: 100 }
+      responses:
+        "200": { description: Opportunity scored }
+  /v1/opportunities/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionOpportunity
+      responses:
+        "200": { description: Opportunity transitioned }
+  /v1/opportunities/{id}/reviews:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: reviewOpportunity
+      responses:
+        "200": { description: Review recorded and opportunity transitioned }
+  /v1/opportunities/{id}/incubations:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createIncubation
+      responses:
+        "201": { description: Incubation created }
+  /v1/opportunities/{id}/blueprints:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createBlueprint
+      responses:
+        "201": { description: Blueprint created }
+  /v1/incubations:
+    get:
+      operationId: listIncubations
+      responses:
+        "200": { description: Incubation collection }
+  /v1/incubations/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionIncubation
+      responses:
+        "200": { description: Incubation transitioned }
+  /v1/blueprints:
+    get:
+      operationId: listBlueprints
+      responses:
+        "200": { description: Blueprint collection }
+  /v1/blueprints/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionBlueprint
+      responses:
+        "200": { description: Blueprint transitioned }
+  /v1/audit:
+    get:
+      operationId: listAudit
+      responses:
+        "200": { description: Tenant audit records }
 components:
   securitySchemes:
     tenant:
       type: apiKey
       in: header
       name: X-Tenant-ID
-
+    actor:
+      type: apiKey
+      in: header
+      name: X-Actor-ID
+  parameters:
+    ObjectID:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema: { type: string, minLength: 1 }
+security:
+  - tenant: []
+    actor: []

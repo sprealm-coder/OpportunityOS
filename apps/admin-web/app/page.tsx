@@ -1,2 +1,58 @@
-import{Metric,PortalShell,StatusBadge}from"@opportunity-os/ui";const nav=["系统首页","租户与品牌","角色与权限","功能开关","审计日志","风险事件","对象 Schema","发布策略"].map(label=>({label,href:"#"}));const objects=[["Opportunity","8 状态","12 字段"],["BusinessBlueprint","9 状态","24 字段"],["ProductVersion","不可变","11 绑定"],["WorkflowDefinition","版本化","15 节点类型"],["LedgerTransaction","只追加","借贷平衡"]];export default function Page(){return <PortalShell title="平台管理" role="Admin Web" navigation={nav}><div className="metrics"><Metric label="活跃租户" value="1" detail="Test Tenant"/><Metric label="对象定义" value="31" detail="5 个逻辑平面"/><Metric label="功能开关" value="3" detail="1 个已开放"/><Metric label="待审风险" value="0" detail="当前测试环境"/></div><section className="panel"><div className="panel-title"><h2>核心对象注册表</h2><StatusBadge>租户隔离已启用</StatusBadge></div><table className="data-grid"><thead><tr><th>对象</th><th>生命周期</th><th>契约</th><th>状态</th></tr></thead><tbody>{objects.map(row=><tr key={row[0]}><td><strong>{row[0]}</strong></td><td>{row[1]}</td><td>{row[2]}</td><td><StatusBadge>已注册</StatusBadge></td></tr>)}</tbody></table></section></PortalShell>}
+"use client";
 
+import { CoreApiClient, type AuditRecord, type Collection } from "@opportunity-os/contracts";
+import { Metric, PortalShell, StatusBadge } from "@opportunity-os/ui";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+const api = new CoreApiClient(
+  process.env.NEXT_PUBLIC_CORE_API_URL ?? "http://127.0.0.1:8080",
+  process.env.NEXT_PUBLIC_TENANT_ID ?? "00000000-0000-4000-8000-000000000001",
+  process.env.NEXT_PUBLIC_ACTOR_ID ?? "admin-web"
+);
+
+const nav = ["系统首页", "租户与品牌", "角色与权限", "功能开关", "审计日志", "风险事件", "对象 Schema", "发布策略"].map(label => ({ label, href: "#audit" }));
+const objects = [
+  ["Opportunity", "8 状态", "PostgreSQL + Outbox"],
+  ["IncubationProject", "8 状态", "事务阶段门"],
+  ["BusinessBlueprint", "9 状态", "JSON 定义"],
+  ["ProductVersion", "不可变", "11 版本绑定"],
+  ["LedgerTransaction", "只追加", "借贷平衡"]
+];
+
+export default function Page() {
+  const [audit, setAudit] = useState<AuditRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    const result = await api.get<Collection<AuditRecord>>("/v1/audit");
+    setAudit(result.items);
+  }, []);
+
+  useEffect(() => {
+    load().catch(error => setError(error instanceof Error ? error.message : "无法读取审计日志")).finally(() => setLoading(false));
+  }, [load]);
+
+  const actors = useMemo(() => new Set(audit.map(item => item.actor_id)).size, [audit]);
+  const objectsTouched = useMemo(() => new Set(audit.map(item => `${item.object_type}:${item.object_id}`)).size, [audit]);
+
+  return <PortalShell title="平台管理" role="Admin Web" navigation={nav}>
+    {error && <div className="notice error" role="alert">{error}</div>}
+    <div className="metrics">
+      <Metric label="审计事件" value={String(audit.length)} detail="当前租户最近 200 条" />
+      <Metric label="活跃操作者" value={String(actors)} detail="来自持久化 Actor ID" />
+      <Metric label="涉及对象" value={String(objectsTouched)} detail="按类型与对象 ID 去重" />
+      <Metric label="事务模式" value="ON" detail="Aggregate + Audit + Outbox" />
+    </div>
+
+    <section className="panel">
+      <div className="panel-title"><h2>核心对象注册表</h2><StatusBadge>PostgreSQL 运行时</StatusBadge></div>
+      <div style={{ overflowX: "auto" }}><table className="data-grid"><thead><tr><th>对象</th><th>生命周期</th><th>持久化契约</th><th>状态</th></tr></thead><tbody>{objects.map(row => <tr key={row[0]}><td><strong>{row[0]}</strong></td><td>{row[1]}</td><td>{row[2]}</td><td><StatusBadge>已注册</StatusBadge></td></tr>)}</tbody></table></div>
+    </section>
+
+    <section className="panel" id="audit">
+      <div className="panel-title"><h2>租户审计日志</h2><button className="button" onClick={() => load().catch(error => setError(error instanceof Error ? error.message : "刷新失败"))}>刷新</button></div>
+      {loading ? <div className="loading">正在读取审计记录...</div> : audit.length === 0 ? <div className="empty-feature">暂无审计记录，先在运营端创建机会</div> :
+        <div style={{ overflowX: "auto" }}><table className="data-grid"><thead><tr><th>时间</th><th>操作者</th><th>动作</th><th>对象</th><th>请求 ID</th></tr></thead><tbody>{audit.map(record => <tr key={record.id}><td>{new Date(record.created_at).toLocaleString("zh-CN")}</td><td>{record.actor_id}</td><td><strong>{record.action}</strong></td><td>{record.object_type}<div className="muted">{record.object_id.slice(0, 12)}</div></td><td>{record.request_id.slice(0, 12)}</td></tr>)}</tbody></table></div>}
+    </section>
+  </PortalShell>;
+}

@@ -15,3 +15,14 @@ INSERT INTO feature_definitions(key,description,default_enabled) VALUES
 ('finance.settlement','Provider and reseller settlement',false)
 ON CONFLICT (key) DO NOTHING;
 
+INSERT INTO tenants (id, name)
+VALUES ('00000000-0000-4000-8000-000000000001', 'OpportunityOS Development')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO brands (id, tenant_id, name)
+VALUES (
+  '00000000-0000-4000-8000-000000000002',
+  '00000000-0000-4000-8000-000000000001',
+  'Development Brand'
+)
+ON CONFLICT DO NOTHING;

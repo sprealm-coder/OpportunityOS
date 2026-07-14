@@ -6,8 +6,10 @@
 - [x] Implement the first executable core vertical slice and tests.
 - [x] Apply real PostgreSQL migrations and neutral seed data locally.
 - [x] Build all seven portal entry points; browser-check admin and operator desktop/mobile views.
-- [ ] Replace in-memory API wiring with PostgreSQL repositories and transaction-scoped audit/outbox writes.
-- [ ] Connect admin-web and operator-console to authenticated API queries and command forms.
+- [x] Replace in-memory API wiring with PostgreSQL repositories and transaction-scoped audit/outbox writes.
+- [x] Connect admin-web and operator-console to tenant-scoped API queries and command forms using explicit development identities.
+- [ ] Replace development identity headers with authenticated session claims and permission-derived commands.
+- [ ] Publish persisted outbox events to Redis Streams with leases, retries, and dead-letter handling.
 
 ## First-release scope retained
 
@@ -15,4 +17,4 @@ Phases C-H remain in scope: full product factory, transaction/execution, finance
 
 ## Next development task
 
-Implement pgx/sqlc repositories for opportunity, evidence, review, incubation, and blueprint aggregates. Each command must use one database transaction for aggregate state, audit, and outbox, with API contract and tenant-isolation integration tests.
+Implement authenticated operator sessions and permission-derived command authorization. Replace browser-provided tenant and actor identity with trusted server-side claims, then add PostgreSQL RLS and authorization integration tests before exposing additional portals.

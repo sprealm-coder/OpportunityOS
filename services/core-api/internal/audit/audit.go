@@ -15,6 +15,7 @@ type Record struct {
 	ObjectType string         `json:"object_type"`
 	ObjectID   string         `json:"object_id"`
 	RequestID  string         `json:"request_id"`
+	TraceID    string         `json:"trace_id"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
 	CreatedAt  time.Time      `json:"created_at"`
 }

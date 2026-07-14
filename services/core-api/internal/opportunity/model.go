@@ -14,9 +14,13 @@ type Signal struct {
 }
 
 type Evidence struct {
-	ID, TenantID, OpportunityID, Kind, Summary string
-	Confidence                                 int
-	CreatedAt                                  time.Time
+	ID            string    `json:"id"`
+	TenantID      string    `json:"tenant_id"`
+	OpportunityID string    `json:"opportunity_id"`
+	Kind          string    `json:"kind"`
+	Summary       string    `json:"summary"`
+	Confidence    int       `json:"confidence"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type Opportunity struct {
