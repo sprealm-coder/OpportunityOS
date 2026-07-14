@@ -1,19 +1,24 @@
 "use client";
 
-import { CoreApiClient, type AuditRecord, type Collection, type Session } from "@opportunity-os/contracts";
+import { CoreApiClient, type AuditRecord, type Collection, type FinanceOverview, type Session } from "@opportunity-os/contracts";
 import { LoginScreen, Metric, PortalShell, StatusBadge } from "@opportunity-os/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const api = new CoreApiClient(process.env.NEXT_PUBLIC_CORE_API_URL ?? "http://127.0.0.1:8080");
 
-const nav = ["系统首页", "租户与品牌", "角色与权限", "功能开关", "审计日志", "风险事件", "对象 Schema", "发布策略"].map(label => ({ label, href: "#audit" }));
+const nav = ["系统首页", "租户与品牌", "角色与权限", "功能开关", "审计日志", "财务治理", "对象 Schema", "发布策略"].map(label => ({ label, href: "#audit" }));
 const objects = [
   ["Opportunity", "8 状态", "PostgreSQL + Outbox"],
   ["IncubationProject", "8 状态", "事务阶段门"],
   ["BusinessBlueprint", "9 状态", "JSON 定义"],
   ["ProductVersion", "不可变", "11 版本绑定"],
-  ["LedgerTransaction", "只追加", "借贷平衡"]
+  ["Wallet / Hold", "资金状态", "可用与冻结分离"],
+  ["LedgerTransaction", "只追加", "借贷平衡 + 快照"],
+  ["ProviderPayable", "应付结算", "成本事实独立"],
+  ["ReconciliationRun", "匹配 / 差异", "运营与账本对照"]
 ];
+
+const emptyFinance: FinanceOverview = { wallets: [], accounts: [], transactions: [], holds: [], refunds: [], commissions: [], provider_payables: [], settlements: [], reconciliation_runs: [] };
 
 export default function Page() {
 	const [session, setSession] = useState<Session | null>(null);
@@ -21,11 +26,13 @@ export default function Page() {
 	const [authBusy, setAuthBusy] = useState(false);
 	const [authError, setAuthError] = useState<string | null>(null);
   const [audit, setAudit] = useState<AuditRecord[]>([]);
+	const [finance, setFinance] = useState<FinanceOverview>(emptyFinance);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
-    const result = await api.get<Collection<AuditRecord>>("/v1/audit");
-    setAudit(result.items);
+		const [auditResult, financeResult] = await Promise.all([api.get<Collection<AuditRecord>>("/v1/audit"), api.get<FinanceOverview>("/v1/finance")]);
+		setAudit(auditResult.items);
+		setFinance(financeResult);
   }, []);
 
   useEffect(() => {
@@ -54,6 +61,7 @@ export default function Page() {
 		await api.logout().catch(() => undefined);
 		setSession(null);
 		setAudit([]);
+		setFinance(emptyFinance);
 	}
 
   const actors = useMemo(() => new Set(audit.map(item => item.actor_id)).size, [audit]);
@@ -67,7 +75,7 @@ export default function Page() {
       <Metric label="审计事件" value={String(audit.length)} detail="当前租户最近 200 条" />
       <Metric label="活跃操作者" value={String(actors)} detail="来自持久化 Actor ID" />
       <Metric label="涉及对象" value={String(objectsTouched)} detail="按类型与对象 ID 去重" />
-      <Metric label="事务模式" value="ON" detail="Aggregate + Audit + Outbox" />
+			<Metric label="账本交易" value={String(finance.transactions.length)} detail={`${finance.wallets.length} 个钱包 · ${finance.reconciliation_runs.filter(item => item.status === "discrepancy").length} 次差异`} />
     </div>
 
     <section className="panel">

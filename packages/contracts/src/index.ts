@@ -143,6 +143,67 @@ export const CustomerChargeSchema = z.object({
   price_book_id: z.string(), currency: z.string().length(3), status: z.string(), idempotency_key: z.string(),
   created_by: z.string(), amount_minor: z.number().int().nonnegative(), created_at: z.string().datetime()
 });
+export const WalletSchema = z.object({
+  id: z.string(), tenant_id: z.string(), owner_type: z.string(), owner_id: z.string(), currency: z.string().length(3),
+  status: z.string(), available_minor: z.number().int(), held_minor: z.number().int(), created_by: z.string(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const LedgerAccountSchema = z.object({
+  id: z.string(), tenant_id: z.string(), wallet_id: z.string().optional(), code: z.string(), name: z.string(),
+  account_type: z.string(), purpose: z.string(), currency: z.string().length(3), balance_minor: z.number().int()
+});
+export const LedgerEntrySchema = z.object({
+  id: z.string(), tenant_id: z.string(), transaction_id: z.string(), account_id: z.string(),
+  direction: z.enum(["debit", "credit"]), currency: z.string().length(3), amount_minor: z.number().int().positive(),
+  created_at: z.string().datetime()
+});
+export const LedgerTransactionSchema = z.object({
+  id: z.string(), tenant_id: z.string(), idempotency_key: z.string(), transaction_type: z.string(),
+  reference_type: z.string(), reference_id: z.string(), description: z.string(), reverses_transaction_id: z.string().optional(),
+  created_by: z.string(), metadata: z.record(z.string(), z.unknown()), entries: z.array(LedgerEntrySchema), created_at: z.string().datetime()
+});
+export const HoldSchema = z.object({
+  id: z.string(), tenant_id: z.string(), wallet_id: z.string(), order_id: z.string(), currency: z.string().length(3),
+  amount_minor: z.number().int().positive(), captured_minor: z.number().int().nonnegative(), released_minor: z.number().int().nonnegative(),
+  remaining_minor: z.number().int().nonnegative(), status: z.string(), ledger_transaction_id: z.string(), idempotency_key: z.string(),
+  created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const RefundSchema = z.object({
+  id: z.string(), tenant_id: z.string(), customer_charge_id: z.string(), wallet_id: z.string(), currency: z.string().length(3),
+  amount_minor: z.number().int().positive(), reason: z.string(), status: z.string(), ledger_transaction_id: z.string(),
+  idempotency_key: z.string(), created_by: z.string(), created_at: z.string().datetime()
+});
+export const CommissionSchema = z.object({
+  id: z.string(), tenant_id: z.string(), customer_charge_id: z.string(), beneficiary_type: z.string(), beneficiary_id: z.string(),
+  currency: z.string().length(3), amount_minor: z.number().int().positive(), settled_minor: z.number().int().nonnegative(), status: z.string(),
+  payable_account_id: z.string(), ledger_transaction_id: z.string(), idempotency_key: z.string(), created_by: z.string(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const ProviderPayableSchema = z.object({
+  id: z.string(), tenant_id: z.string(), provider_cost_id: z.string(), provider_id: z.string(), currency: z.string().length(3),
+  amount_minor: z.number().int().positive(), settled_minor: z.number().int().nonnegative(), status: z.string(), payable_account_id: z.string(),
+  ledger_transaction_id: z.string(), idempotency_key: z.string(), created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const SettlementSchema = z.object({
+  id: z.string(), tenant_id: z.string(), source_type: z.string(), source_id: z.string(), beneficiary_type: z.string(),
+  beneficiary_id: z.string(), currency: z.string().length(3), amount_minor: z.number().int().positive(), status: z.string(),
+  ledger_transaction_id: z.string(), idempotency_key: z.string(), created_by: z.string(), created_at: z.string().datetime()
+});
+export const ReconciliationItemSchema = z.object({
+  id: z.string(), tenant_id: z.string(), run_id: z.string(), reference_type: z.string(), reference_id: z.string(),
+  currency: z.string().length(3), expected_minor: z.number().int().nonnegative(), actual_minor: z.number().int().nonnegative(),
+  status: z.string(), created_at: z.string().datetime()
+});
+export const ReconciliationRunSchema = z.object({
+  id: z.string(), tenant_id: z.string(), order_id: z.string().optional(), status: z.string(), checked_count: z.number().int().nonnegative(),
+  discrepancy_count: z.number().int().nonnegative(), created_by: z.string(), idempotency_key: z.string(),
+  started_at: z.string().datetime(), completed_at: z.string().datetime(), items: z.array(ReconciliationItemSchema)
+});
+export const FinanceOverviewSchema = z.object({
+  wallets: z.array(WalletSchema), accounts: z.array(LedgerAccountSchema), transactions: z.array(LedgerTransactionSchema),
+  holds: z.array(HoldSchema), refunds: z.array(RefundSchema), commissions: z.array(CommissionSchema),
+  provider_payables: z.array(ProviderPayableSchema), settlements: z.array(SettlementSchema), reconciliation_runs: z.array(ReconciliationRunSchema)
+});
 export const OrderSchema = z.object({
   id: z.string(), tenant_id: z.string(), customer_id: z.string(), quote_version_id: z.string(), status: z.string(),
   currency: z.string().length(3), idempotency_key: z.string(), amount_minor: z.number().int().nonnegative(),
@@ -182,6 +243,18 @@ export type DeliveryProject = z.infer<typeof DeliveryProjectSchema>;
 export type UsageRecord = z.infer<typeof UsageRecordSchema>;
 export type ProviderCost = z.infer<typeof ProviderCostSchema>;
 export type CustomerCharge = z.infer<typeof CustomerChargeSchema>;
+export type Wallet = z.infer<typeof WalletSchema>;
+export type LedgerAccount = z.infer<typeof LedgerAccountSchema>;
+export type LedgerEntry = z.infer<typeof LedgerEntrySchema>;
+export type LedgerTransaction = z.infer<typeof LedgerTransactionSchema>;
+export type Hold = z.infer<typeof HoldSchema>;
+export type Refund = z.infer<typeof RefundSchema>;
+export type Commission = z.infer<typeof CommissionSchema>;
+export type ProviderPayable = z.infer<typeof ProviderPayableSchema>;
+export type Settlement = z.infer<typeof SettlementSchema>;
+export type ReconciliationItem = z.infer<typeof ReconciliationItemSchema>;
+export type ReconciliationRun = z.infer<typeof ReconciliationRunSchema>;
+export type FinanceOverview = z.infer<typeof FinanceOverviewSchema>;
 export type Order = z.infer<typeof OrderSchema>;
 
 export type Collection<T> = { items: T[] };

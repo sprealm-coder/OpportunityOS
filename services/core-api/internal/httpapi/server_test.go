@@ -12,6 +12,7 @@ import (
 
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/application"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/auth"
+	"github.com/opportunity-os/opportunity-os/services/core-api/internal/finance"
 	orderdomain "github.com/opportunity-os/opportunity-os/services/core-api/internal/order"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/tenancy"
 )
@@ -253,5 +254,38 @@ func TestAPITransactionRoutes(t *testing.T) {
 	server.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("order-api")) {
 		t.Fatalf("list orders status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+type financeAPIStore struct {
+	application.Store
+	application.FinanceStore
+	overview finance.Overview
+}
+
+func (s *financeAPIStore) CreateWallet(_ context.Context, scope tenancy.Scope, input application.WalletInput, key string) (finance.Wallet, error) {
+	wallet := finance.Wallet{ID: "wallet-api", TenantID: scope.TenantID, OwnerType: input.OwnerType, OwnerID: input.OwnerID, Currency: input.Currency, Status: "active", CreatedBy: scope.ActorID, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	s.overview.Wallets = append(s.overview.Wallets, wallet)
+	return wallet, nil
+}
+
+func (s *financeAPIStore) ListFinance(_ context.Context, _ tenancy.Scope) (finance.Overview, error) {
+	return s.overview, nil
+}
+
+func TestAPIFinanceRoutes(t *testing.T) {
+	store := &financeAPIStore{Store: application.NewMemoryStore(), overview: finance.Overview{Wallets: []finance.Wallet{}, Accounts: []finance.Account{}, Transactions: []finance.Transaction{}, Holds: []finance.Hold{}, Refunds: []finance.Refund{}, Commissions: []finance.Commission{}, ProviderPayables: []finance.ProviderPayable{}, Settlements: []finance.Settlement{}, ReconciliationRuns: []finance.ReconciliationRun{}}}
+	server := newHandler(store, true)
+	wallet := apiCommand(t, server, http.MethodPost, "/v1/wallets", `{"owner_type":"customer","owner_id":"Test Customer","currency":"USD"}`, "wallet-api", http.StatusCreated)
+	if wallet["id"] != "wallet-api" || wallet["owner_id"] != "Test Customer" {
+		t.Fatalf("unexpected wallet response: %#v", wallet)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/v1/finance", nil)
+	request.Header.Set("X-Tenant-ID", "tenant-api-flow")
+	request.Header.Set("X-Actor-ID", "actor-api-flow")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("wallet-api")) || !bytes.Contains(response.Body.Bytes(), []byte("transactions")) {
+		t.Fatalf("finance overview status=%d body=%s", response.Code, response.Body.String())
 	}
 }

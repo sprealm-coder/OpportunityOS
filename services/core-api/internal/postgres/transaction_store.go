@@ -681,6 +681,15 @@ func (s *Store) TransitionOrder(ctx context.Context, scope tenancy.Scope, id, to
 		if err = item.Transition(to); err != nil {
 			return item, "", err
 		}
+		if to == "paid" && item.AmountMinor > 0 {
+			var heldMinor int64
+			if err = tx.QueryRow(ctx, `SELECT COALESCE(sum(amount_minor-captured_minor-released_minor),0) FROM holds WHERE tenant_id=$1 AND order_id=$2 AND status IN ('active','partially_captured')`, scope.TenantID, id).Scan(&heldMinor); err != nil {
+				return item, "", err
+			}
+			if heldMinor < item.AmountMinor {
+				return item, "", platform.Invalid("payment_hold_required", "order payment requires sufficient active held funds")
+			}
+		}
 		if to == "provisioning" {
 			if err = createFulfillment(ctx, tx, scope, item, key); err != nil {
 				return item, "", err
@@ -752,6 +761,19 @@ func (s *Store) TransitionExecution(ctx context.Context, scope tenancy.Scope, id
 		}
 		if input.To == "reserved" && item.ProviderEndpointID == "" {
 			return item, "", platform.Invalid("provider_required", "provider endpoint is required before reservation")
+		}
+		if input.To == "settled" {
+			var unpostedCharges, missingPayables int
+			if err = tx.QueryRow(ctx, `
+				SELECT
+				  (SELECT count(*) FROM customer_charges charge WHERE charge.tenant_id=$1 AND charge.execution_order_id=$2 AND charge.status NOT IN ('posted','reversed'))
+				  + CASE WHEN EXISTS(SELECT 1 FROM customer_charges charge WHERE charge.tenant_id=$1 AND charge.execution_order_id=$2) THEN 0 ELSE 1 END,
+				  (SELECT count(*) FROM provider_costs cost LEFT JOIN provider_payables payable ON payable.tenant_id=cost.tenant_id AND payable.provider_cost_id=cost.id WHERE cost.tenant_id=$1 AND cost.execution_order_id=$2 AND payable.id IS NULL)`, scope.TenantID, id).Scan(&unpostedCharges, &missingPayables); err != nil {
+				return item, "", err
+			}
+			if unpostedCharges > 0 || missingPayables > 0 {
+				return item, "", platform.Invalid("financial_posting_incomplete", "customer charges and provider payables must be posted before execution settlement")
+			}
 		}
 		if err = item.Transition(input.To); err != nil {
 			return item, "", err

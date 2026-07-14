@@ -88,6 +88,17 @@ func newHandler(store application.Store, allowHeaderAuth bool) http.Handler {
 			r.With(server.requirePermission(permission.BillingWrite)).Post("/executions/{id}/usage", server.recordUsage)
 			r.With(server.requirePermission(permission.BillingWrite)).Post("/executions/{id}/provider-costs", server.recordProviderCost)
 			r.With(server.requirePermission(permission.BillingWrite)).Post("/executions/{id}/customer-charges", server.createCustomerCharge)
+			r.With(server.requirePermission(permission.FinanceRead)).Get("/finance", server.listFinance)
+			r.With(server.requirePermission(permission.WalletWrite)).Post("/wallets", server.createWallet)
+			r.With(server.requirePermission(permission.FinanceAdjust)).Post("/wallets/{id}/adjustments", server.postWalletAdjustment)
+			r.With(server.requirePermission(permission.LedgerPost)).Post("/orders/{id}/holds", server.placeOrderHold)
+			r.With(server.requirePermission(permission.LedgerPost)).Post("/holds/{id}/releases", server.releaseHold)
+			r.With(server.requirePermission(permission.LedgerPost)).Post("/customer-charges/{id}/postings", server.postCustomerCharge)
+			r.With(server.requirePermission(permission.LedgerPost)).Post("/customer-charges/{id}/refunds", server.refundCustomerCharge)
+			r.With(server.requirePermission(permission.LedgerPost)).Post("/customer-charges/{id}/commissions", server.createCommission)
+			r.With(server.requirePermission(permission.LedgerPost)).Post("/provider-costs/{id}/payables", server.createProviderPayable)
+			r.With(server.requirePermission(permission.SettlementWrite)).Post("/settlements", server.createSettlement)
+			r.With(server.requirePermission(permission.ReconciliationWrite)).Post("/reconciliation-runs", server.runReconciliation)
 			r.With(server.requirePermission(permission.AuditRead)).Get("/audit", server.listAudit)
 		})
 	})
@@ -1162,6 +1173,218 @@ func (s *Server) createCustomerCharge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item, err := store.CreateCustomerCharge(r.Context(), tenantScope, chi.URLParam(r, "id"), requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) financeStore() (application.FinanceStore, error) {
+	store, ok := s.store.(application.FinanceStore)
+	if !ok {
+		return nil, platform.Invalid("feature_unavailable", "finance persistence is not configured")
+	}
+	return store, nil
+}
+
+func (s *Server) listFinance(w http.ResponseWriter, r *http.Request) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return
+	}
+	store, err := s.financeStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return
+	}
+	item, err := store.ListFinance(r.Context(), tenantScope)
+	if err != nil {
+		writeError(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func financeCommandContext(s *Server, w http.ResponseWriter, r *http.Request) (tenancy.Scope, string, application.FinanceStore, bool) {
+	tenantScope, err := scope(r)
+	if err != nil {
+		writeError(w, r, http.StatusUnauthorized, err)
+		return tenancy.Scope{}, "", nil, false
+	}
+	requestID, err := idempotency(r)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err)
+		return tenancy.Scope{}, "", nil, false
+	}
+	store, err := s.financeStore()
+	if err != nil {
+		writeError(w, r, http.StatusServiceUnavailable, err)
+		return tenancy.Scope{}, "", nil, false
+	}
+	return tenantScope, requestID, store, true
+}
+
+func (s *Server) createWallet(w http.ResponseWriter, r *http.Request) {
+	tenantScope, requestID, store, ok := financeCommandContext(s, w, r)
+	if !ok {
+		return
+	}
+	var input application.WalletInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.CreateWallet(r.Context(), tenantScope, input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) postWalletAdjustment(w http.ResponseWriter, r *http.Request) {
+	tenantScope, requestID, store, ok := financeCommandContext(s, w, r)
+	if !ok {
+		return
+	}
+	var input application.WalletAdjustmentInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.PostWalletAdjustment(r.Context(), tenantScope, chi.URLParam(r, "id"), input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) placeOrderHold(w http.ResponseWriter, r *http.Request) {
+	tenantScope, requestID, store, ok := financeCommandContext(s, w, r)
+	if !ok {
+		return
+	}
+	var input application.HoldInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.PlaceOrderHold(r.Context(), tenantScope, chi.URLParam(r, "id"), input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) releaseHold(w http.ResponseWriter, r *http.Request) {
+	tenantScope, requestID, store, ok := financeCommandContext(s, w, r)
+	if !ok {
+		return
+	}
+	var input application.ReleaseInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.ReleaseHold(r.Context(), tenantScope, chi.URLParam(r, "id"), input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) postCustomerCharge(w http.ResponseWriter, r *http.Request) {
+	tenantScope, requestID, store, ok := financeCommandContext(s, w, r)
+	if !ok {
+		return
+	}
+	var input application.ChargePostingInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.PostCustomerCharge(r.Context(), tenantScope, chi.URLParam(r, "id"), input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) refundCustomerCharge(w http.ResponseWriter, r *http.Request) {
+	tenantScope, requestID, store, ok := financeCommandContext(s, w, r)
+	if !ok {
+		return
+	}
+	var input application.RefundInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.RefundCustomerCharge(r.Context(), tenantScope, chi.URLParam(r, "id"), input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) createCommission(w http.ResponseWriter, r *http.Request) {
+	tenantScope, requestID, store, ok := financeCommandContext(s, w, r)
+	if !ok {
+		return
+	}
+	var input application.CommissionInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.CreateCommission(r.Context(), tenantScope, chi.URLParam(r, "id"), input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) createProviderPayable(w http.ResponseWriter, r *http.Request) {
+	tenantScope, requestID, store, ok := financeCommandContext(s, w, r)
+	if !ok {
+		return
+	}
+	item, err := store.CreateProviderPayable(r.Context(), tenantScope, chi.URLParam(r, "id"), requestID)
+	if err != nil {
+		writeError(w, r, http.StatusUnprocessableEntity, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) createSettlement(w http.ResponseWriter, r *http.Request) {
+	tenantScope, requestID, store, ok := financeCommandContext(s, w, r)
+	if !ok {
+		return
+	}
+	var input application.SettlementInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.CreateSettlement(r.Context(), tenantScope, input, requestID)
+	if err != nil {
+		writeError(w, r, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) runReconciliation(w http.ResponseWriter, r *http.Request) {
+	tenantScope, requestID, store, ok := financeCommandContext(s, w, r)
+	if !ok {
+		return
+	}
+	var input application.ReconciliationInput
+	if !decode(w, r, &input) {
+		return
+	}
+	item, err := store.RunReconciliation(r.Context(), tenantScope, input, requestID)
 	if err != nil {
 		writeError(w, r, http.StatusUnprocessableEntity, err)
 		return

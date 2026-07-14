@@ -15,9 +15,14 @@
 - Atomic provisioning of Subscription, Entitlement, ExecutionOrder, and DeliveryProject records.
 - Controlled execution and delivery transitions plus separate Usage, ProviderCost, and CustomerCharge records.
 - Authenticated transaction/execution APIs and an operator workflow for quote-to-fulfillment commands.
+- Tenant-scoped Wallet and available/held liability accounts with integer balances rebuilt from append-only entries.
+- PostgreSQL-backed Hold, Release, CustomerCharge posting, Refund, Commission, ProviderPayable, Settlement, and Reconciliation commands.
+- Deferred debit/credit balance enforcement, immutable runtime ledger history, account locking, and append-only balance snapshots.
+- Finance permissions, OpenAPI `0.5.0`, shared TypeScript contracts, and operator/admin finance views.
 
 ### Changed
 
 - Browser clients now derive tenant and actor from trusted sessions instead of request headers.
 - Growth Quote now aliases the canonical transaction-domain Quote instead of defining a duplicate model.
-- The next development boundary advances to phase E wallet, hold, ledger posting, refund, commission, settlement, and reconciliation persistence.
+- Orders now require sufficient active held funds before payment, and executions require posted charges and provider payables before settlement.
+- The next development boundary advances to phase F product-agnostic growth persistence: MarketSegment, ICP, Lead, Evidence, Proof, Campaign, Conversation, Deal, and Experiment.

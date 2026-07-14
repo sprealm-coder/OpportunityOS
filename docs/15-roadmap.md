@@ -21,11 +21,16 @@
 - [x] Create Subscription, Entitlement, ExecutionOrder, and DeliveryProject records atomically at the provisioning boundary.
 - [x] Persist controlled execution/delivery transitions and separate Usage, ProviderCost, and CustomerCharge facts.
 - [x] Connect the operator transaction workspace to authenticated quote-to-fulfillment commands.
+- [x] Persist Wallet, LedgerAccount, append-only LedgerTransaction/LedgerEntry, and BalanceSnapshot under tenant RLS.
+- [x] Enforce account-locked Hold, Release, CustomerCharge posting, Refund, Commission, ProviderPayable, and Settlement commands.
+- [x] Reconcile CustomerCharge, ProviderCost, and Commission facts against accounting entries with stored discrepancies.
+- [x] Gate order payment and execution settlement on financial prerequisites.
+- [x] Connect operator finance operations and admin finance governance to authenticated APIs.
 
 ## First-release scope retained
 
-The remaining parts of phases C-H remain in scope: supplier contracts and quality, finance persistence, growth, reseller/supplier/marketplace workflows, and production end-to-end hardening.
+The remaining parts of phases C-H remain in scope: supplier contracts and quality, growth, reseller/supplier/marketplace workflows, and production end-to-end hardening.
 
 ## Next development task
 
-Implement phase E persistence on the authenticated/RLS-aware repository boundary: Wallet, LedgerAccount, append-only LedgerTransaction/LedgerEntry, Hold, Release, Charge posting, Refund, Commission, ProviderPayable, Settlement, and Reconciliation. Connect calculated CustomerCharge and ProviderCost facts to balanced, idempotent ledger commands without merging operational facts into accounting entries.
+Implement phase F on the authenticated/RLS-aware repository boundary: MarketSegment, ICPDefinition, Lead, LeadEvidence, ProofTemplate, ProofRequest, ProofInstance, Campaign, Conversation, Deal, and Experiment. Keep Proof product-agnostic, preserve suppression and approval controls, and connect Deal to the canonical Quote without introducing a duplicate order source of truth.

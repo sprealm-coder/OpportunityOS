@@ -9,6 +9,7 @@ import (
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/blueprint"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/capability"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/catalog"
+	"github.com/opportunity-os/opportunity-os/services/core-api/internal/finance"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/incubation"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/opportunity"
 	orderdomain "github.com/opportunity-os/opportunity-os/services/core-api/internal/order"
@@ -76,6 +77,53 @@ type ExecutionTransitionInput struct {
 	Error              map[string]any `json:"error"`
 }
 
+type WalletInput struct {
+	OwnerType string `json:"owner_type"`
+	OwnerID   string `json:"owner_id"`
+	Currency  string `json:"currency"`
+}
+
+type WalletAdjustmentInput struct {
+	Direction   string `json:"direction"`
+	AmountMinor int64  `json:"amount_minor"`
+	Reason      string `json:"reason"`
+}
+
+type HoldInput struct {
+	WalletID    string `json:"wallet_id"`
+	AmountMinor int64  `json:"amount_minor"`
+}
+
+type ReleaseInput struct {
+	AmountMinor int64 `json:"amount_minor"`
+}
+
+type ChargePostingInput struct {
+	HoldID string `json:"hold_id"`
+}
+
+type RefundInput struct {
+	WalletID    string `json:"wallet_id"`
+	AmountMinor int64  `json:"amount_minor"`
+	Reason      string `json:"reason"`
+}
+
+type CommissionInput struct {
+	BeneficiaryType string `json:"beneficiary_type"`
+	BeneficiaryID   string `json:"beneficiary_id"`
+	AmountMinor     int64  `json:"amount_minor"`
+}
+
+type SettlementInput struct {
+	SourceType  string `json:"source_type"`
+	SourceID    string `json:"source_id"`
+	AmountMinor int64  `json:"amount_minor"`
+}
+
+type ReconciliationInput struct {
+	OrderID string `json:"order_id"`
+}
+
 type Store interface {
 	CreateSession(context.Context, string, string) (auth.Session, error)
 	ResolveSession(context.Context, string) (auth.Session, error)
@@ -128,4 +176,18 @@ type TransactionStore interface {
 	RecordUsage(context.Context, tenancy.Scope, string, int64, time.Time, string) (orderdomain.UsageRecord, error)
 	RecordProviderCost(context.Context, tenancy.Scope, string, string, string, int64, string) (orderdomain.ProviderCost, error)
 	CreateCustomerCharge(context.Context, tenancy.Scope, string, string) (orderdomain.CustomerCharge, error)
+}
+
+type FinanceStore interface {
+	ListFinance(context.Context, tenancy.Scope) (finance.Overview, error)
+	CreateWallet(context.Context, tenancy.Scope, WalletInput, string) (finance.Wallet, error)
+	PostWalletAdjustment(context.Context, tenancy.Scope, string, WalletAdjustmentInput, string) (finance.Adjustment, error)
+	PlaceOrderHold(context.Context, tenancy.Scope, string, HoldInput, string) (finance.Hold, error)
+	ReleaseHold(context.Context, tenancy.Scope, string, ReleaseInput, string) (finance.Hold, error)
+	PostCustomerCharge(context.Context, tenancy.Scope, string, ChargePostingInput, string) (finance.Transaction, error)
+	RefundCustomerCharge(context.Context, tenancy.Scope, string, RefundInput, string) (finance.Refund, error)
+	CreateCommission(context.Context, tenancy.Scope, string, CommissionInput, string) (finance.Commission, error)
+	CreateProviderPayable(context.Context, tenancy.Scope, string, string) (finance.ProviderPayable, error)
+	CreateSettlement(context.Context, tenancy.Scope, SettlementInput, string) (finance.Settlement, error)
+	RunReconciliation(context.Context, tenancy.Scope, ReconciliationInput, string) (finance.ReconciliationRun, error)
 }

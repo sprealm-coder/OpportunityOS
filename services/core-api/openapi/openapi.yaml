@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpportunityOS Core API
-  version: 0.4.0
+  version: 0.5.0
 servers:
   - url: http://127.0.0.1:8080
 paths:
@@ -375,6 +375,89 @@ paths:
       operationId: calculateCustomerCharge
       responses:
         "201": { description: Customer charge calculated from immutable pricing and recorded usage }
+  /v1/finance:
+    get:
+      operationId: listFinance
+      responses:
+        "200":
+          description: Tenant wallet, ledger, payable, settlement, and reconciliation view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinanceOverview" }
+  /v1/wallets:
+    post:
+      operationId: createWallet
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [owner_type, owner_id, currency]
+              properties:
+                owner_type: { type: string, enum: [customer, provider, reseller, platform] }
+                owner_id: { type: string, minLength: 1 }
+                currency: { type: string, minLength: 3, maxLength: 3 }
+      responses:
+        "201": { description: Wallet and available/held liability accounts created }
+  /v1/wallets/{id}/adjustments:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: postWalletAdjustment
+      responses:
+        "201": { description: Administrative balanced wallet adjustment posted }
+        "403": { description: Administrative finance permission required }
+  /v1/orders/{id}/holds:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: placeOrderHold
+      responses:
+        "201": { description: Available wallet funds moved to held funds without revenue recognition }
+        "422": { description: Wallet mismatch or insufficient available balance }
+  /v1/holds/{id}/releases:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: releaseHold
+      responses:
+        "200": { description: Remaining held funds returned to available balance }
+  /v1/customer-charges/{id}/postings:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: postCustomerCharge
+      responses:
+        "201": { description: Calculated CustomerCharge converted to a balanced ledger transaction }
+        "409": { description: Charge is already posted or held funds do not cover it }
+  /v1/customer-charges/{id}/refunds:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: refundCustomerCharge
+      responses:
+        "201": { description: Refund posted as a new balanced transaction without editing history }
+  /v1/customer-charges/{id}/commissions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createCommission
+      responses:
+        "201": { description: Commission expense and beneficiary payable posted }
+  /v1/provider-costs/{id}/payables:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createProviderPayable
+      responses:
+        "201": { description: ProviderCost converted to provider expense and payable entries }
+  /v1/settlements:
+    post:
+      operationId: createSettlement
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Provider payable or commission settled against platform cash }
+  /v1/reconciliation-runs:
+    post:
+      operationId: runReconciliation
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Operational charges, costs, and commissions compared with accounting facts }
   /v1/audit:
     get:
       operationId: listAudit
@@ -387,6 +470,46 @@ components:
       in: cookie
       name: opportunity_session
   schemas:
+    FinanceOverview:
+      type: object
+      required: [wallets, accounts, transactions, holds, refunds, commissions, provider_payables, settlements, reconciliation_runs]
+      properties:
+        wallets: { type: array, items: { $ref: "#/components/schemas/Wallet" } }
+        accounts: { type: array, items: { type: object, additionalProperties: true } }
+        transactions: { type: array, items: { $ref: "#/components/schemas/LedgerTransaction" } }
+        holds: { type: array, items: { type: object, additionalProperties: true } }
+        refunds: { type: array, items: { type: object, additionalProperties: true } }
+        commissions: { type: array, items: { type: object, additionalProperties: true } }
+        provider_payables: { type: array, items: { type: object, additionalProperties: true } }
+        settlements: { type: array, items: { type: object, additionalProperties: true } }
+        reconciliation_runs: { type: array, items: { type: object, additionalProperties: true } }
+    Wallet:
+      type: object
+      required: [id, tenant_id, owner_type, owner_id, currency, status, available_minor, held_minor]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        owner_type: { type: string }
+        owner_id: { type: string }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        status: { type: string }
+        available_minor: { type: integer }
+        held_minor: { type: integer }
+    LedgerTransaction:
+      type: object
+      required: [id, tenant_id, idempotency_key, transaction_type, reference_type, reference_id, entries, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        idempotency_key: { type: string }
+        transaction_type: { type: string }
+        reference_type: { type: string }
+        reference_id: { type: string }
+        entries:
+          type: array
+          minItems: 2
+          items: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
     QuoteInput:
       type: object
       required: [deal_id, customer_id, currency, valid_until, items]

@@ -156,14 +156,12 @@ func TestNeutralEndToEnd(t *testing.T) {
 	bindings := order.VersionBindings{ProductVersionID: productVersion.ID, SKUVersionID: skuVersion.ID, PricingVersionID: priceBook.ID, WorkflowVersionID: definition.ID, RoutingVersionID: policy.ID, ContractVersionID: "test-contract-v1"}
 	customerOrder, err := order.New(scope.TenantID, "Test Customer", "order-e2e", charge.Currency, quote.Versions[0].AmountMinor, bindings)
 	must(t, err)
-	for _, target := range []string{"awaiting_payment", "paid", "provisioning", "active"} {
-		must(t, customerOrder.Transition(target))
-	}
+	must(t, customerOrder.Transition("awaiting_payment"))
 	executionRequest.OrderID = customerOrder.ID
 	checkpoints = append(checkpoints, "deal", "quote", "order")
 
 	book := ledger.New()
-	accounts := []ledger.Account{{ID: "cash", TenantID: scope.TenantID, Code: "cash", Name: "Test Cash", Currency: "USD", Type: ledger.Asset}, {ID: "equity", TenantID: scope.TenantID, Code: "equity", Name: "Test Equity", Currency: "USD", Type: ledger.Equity}, {ID: "wallet", TenantID: scope.TenantID, Code: "wallet", Name: "Test Customer Wallet", Currency: "USD", Type: ledger.Liability}, {ID: "held", TenantID: scope.TenantID, Code: "held", Name: "Test Held Funds", Currency: "USD", Type: ledger.Liability}, {ID: "revenue", TenantID: scope.TenantID, Code: "revenue", Name: "Test Revenue", Currency: "USD", Type: ledger.Revenue}, {ID: "provider_payable", TenantID: scope.TenantID, Code: "provider_payable", Name: "Test Provider Payable", Currency: "USD", Type: ledger.Liability}, {ID: "commission", TenantID: scope.TenantID, Code: "commission", Name: "Test Commission", Currency: "USD", Type: ledger.Liability}, {ID: "promotion", TenantID: scope.TenantID, Code: "promotion", Name: "Test Promotional Credit", Currency: "USD", Type: ledger.Expense}}
+	accounts := []ledger.Account{{ID: "cash", TenantID: scope.TenantID, Code: "cash", Name: "Test Cash", Currency: "USD", Type: ledger.Asset}, {ID: "equity", TenantID: scope.TenantID, Code: "equity", Name: "Test Equity", Currency: "USD", Type: ledger.Equity}, {ID: "wallet", TenantID: scope.TenantID, Code: "wallet", Name: "Test Customer Wallet", Currency: "USD", Type: ledger.Liability}, {ID: "held", TenantID: scope.TenantID, Code: "held", Name: "Test Held Funds", Currency: "USD", Type: ledger.Liability}, {ID: "revenue", TenantID: scope.TenantID, Code: "revenue", Name: "Test Revenue", Currency: "USD", Type: ledger.Revenue}, {ID: "provider_cost", TenantID: scope.TenantID, Code: "provider_cost", Name: "Test Provider Cost", Currency: "USD", Type: ledger.Expense}, {ID: "provider_payable", TenantID: scope.TenantID, Code: "provider_payable", Name: "Test Provider Payable", Currency: "USD", Type: ledger.Liability}, {ID: "commission_expense", TenantID: scope.TenantID, Code: "commission_expense", Name: "Test Commission Expense", Currency: "USD", Type: ledger.Expense}, {ID: "commission", TenantID: scope.TenantID, Code: "commission", Name: "Test Commission", Currency: "USD", Type: ledger.Liability}, {ID: "promotion", TenantID: scope.TenantID, Code: "promotion", Name: "Test Promotional Credit", Currency: "USD", Type: ledger.Expense}}
 	for _, account := range accounts {
 		must(t, book.AddAccount(account))
 	}
@@ -176,6 +174,9 @@ func TestNeutralEndToEnd(t *testing.T) {
 	post("credit-wallet", customerOrder.ID, []ledger.Entry{{AccountID: "promotion", Currency: "USD", Direction: ledger.Debit, AmountMinor: 1000}, {AccountID: "wallet", Currency: "USD", Direction: ledger.Credit, AmountMinor: 1000}})
 	post("hold-order", customerOrder.ID, []ledger.Entry{{AccountID: "wallet", Currency: "USD", Direction: ledger.Debit, AmountMinor: 800}, {AccountID: "held", Currency: "USD", Direction: ledger.Credit, AmountMinor: 800}})
 	checkpoints = append(checkpoints, "hold")
+	for _, target := range []string{"paid", "provisioning", "active"} {
+		must(t, customerOrder.Transition(target))
+	}
 	result, err := adapter.Execute(ctx, executionRequest)
 	must(t, err)
 	units := result.Usage["units"].(int64)
@@ -183,15 +184,21 @@ func TestNeutralEndToEnd(t *testing.T) {
 	must(t, err)
 	providerCost := int64(250)
 	commission := int64(50)
-	platformRevenue := finalCharge.Minor - providerCost - commission
-	post("charge-order", customerOrder.ID, []ledger.Entry{{AccountID: "held", Currency: "USD", Direction: ledger.Debit, AmountMinor: finalCharge.Minor}, {AccountID: "revenue", Currency: "USD", Direction: ledger.Credit, AmountMinor: platformRevenue}, {AccountID: "provider_payable", Currency: "USD", Direction: ledger.Credit, AmountMinor: providerCost}, {AccountID: "commission", Currency: "USD", Direction: ledger.Credit, AmountMinor: commission}})
+	post("charge-order", customerOrder.ID, []ledger.Entry{{AccountID: "held", Currency: "USD", Direction: ledger.Debit, AmountMinor: finalCharge.Minor}, {AccountID: "revenue", Currency: "USD", Direction: ledger.Credit, AmountMinor: finalCharge.Minor}})
+	post("provider-payable", customerOrder.ID, []ledger.Entry{{AccountID: "provider_cost", Currency: "USD", Direction: ledger.Debit, AmountMinor: providerCost}, {AccountID: "provider_payable", Currency: "USD", Direction: ledger.Credit, AmountMinor: providerCost}})
+	post("commission-payable", customerOrder.ID, []ledger.Entry{{AccountID: "commission_expense", Currency: "USD", Direction: ledger.Debit, AmountMinor: commission}, {AccountID: "commission", Currency: "USD", Direction: ledger.Credit, AmountMinor: commission}})
 	post("release-hold", customerOrder.ID, []ledger.Entry{{AccountID: "held", Currency: "USD", Direction: ledger.Debit, AmountMinor: 100}, {AccountID: "wallet", Currency: "USD", Direction: ledger.Credit, AmountMinor: 100}})
 	post("settle-provider", customerOrder.ID, []ledger.Entry{{AccountID: "provider_payable", Currency: "USD", Direction: ledger.Debit, AmountMinor: providerCost}, {AccountID: "cash", Currency: "USD", Direction: ledger.Credit, AmountMinor: providerCost}})
+	post("settle-commission", customerOrder.ID, []ledger.Entry{{AccountID: "commission", Currency: "USD", Direction: ledger.Debit, AmountMinor: commission}, {AccountID: "cash", Currency: "USD", Direction: ledger.Credit, AmountMinor: commission}})
+	post("refund-order", customerOrder.ID, []ledger.Entry{{AccountID: "revenue", Currency: "USD", Direction: ledger.Debit, AmountMinor: 100}, {AccountID: "wallet", Currency: "USD", Direction: ledger.Credit, AmountMinor: 100}})
 	must(t, customerOrder.Transition("completed"))
-	checkpoints = append(checkpoints, "execution", "usage", "provider_cost", "customer_charge", "ledger_charge", "commission", "payable", "settlement", "outcome_feedback")
+	checkpoints = append(checkpoints, "execution", "usage", "provider_cost", "customer_charge", "ledger_charge", "commission", "payable", "settlement", "refund", "reconciliation", "outcome_feedback")
 
 	if balance, err := book.Balance(scope.TenantID, "held"); err != nil || balance != 0 {
 		t.Fatalf("held funds not cleared: %d %v", balance, err)
+	}
+	if balance, err := book.Balance(scope.TenantID, "revenue"); err != nil || balance != 600 {
+		t.Fatalf("unexpected net revenue: %d %v", balance, err)
 	}
 	if len(checkpoints) < 30 {
 		t.Fatalf("acceptance chain incomplete: %v", checkpoints)

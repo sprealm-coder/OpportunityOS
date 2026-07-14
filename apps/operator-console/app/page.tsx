@@ -5,6 +5,7 @@ import {
   type Blueprint,
 	type Capability,
   type Collection,
+	type FinanceOverview,
   type Incubation,
   type Opportunity,
 	type Product,
@@ -19,7 +20,12 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react
 
 const api = new CoreApiClient(process.env.NEXT_PUBLIC_CORE_API_URL ?? "http://127.0.0.1:8080");
 
-const nav = ["运行概览", "机会审核", "孵化项目", "业务蓝图", "产品发布", "工作流运行", "对账队列"].map(label => ({ label, href: "#workspace" }));
+const emptyFinance: FinanceOverview = {
+	wallets: [], accounts: [], transactions: [], holds: [], refunds: [], commissions: [],
+	provider_payables: [], settlements: [], reconciliation_runs: []
+};
+
+const nav = ["运行概览", "机会审核", "孵化项目", "业务蓝图", "产品发布", "交易执行", "财务对账"].map(label => ({ label, href: "#workspace" }));
 const statusLabel: Record<string, string> = {
   detected: "待补充证据", enriched: "待评分", scored: "待送审", under_review: "审核中",
   approved: "已批准", incubating: "孵化中", rejected: "已拒绝", archived: "已归档",
@@ -28,12 +34,13 @@ const statusLabel: Record<string, string> = {
 	sent: "已发送", accepted: "已接受", expired: "已过期", cancelled: "已取消",
 	created: "已创建", awaiting_payment: "待支付", paid: "已支付", provisioning: "履约中", active: "已生效", completed: "已完成",
 	reserved: "已预留", queued: "已排队", submitted: "已提交", processing: "处理中", succeeded: "已成功", failed: "失败", reconciling: "对账中", settled: "已结算",
-	in_progress: "进行中", waiting: "等待中", calculated: "已计算", pending: "待生效"
+	in_progress: "进行中", waiting: "等待中", calculated: "已计算", pending: "待生效", posted: "已入账", reversed: "已冲退",
+	open: "待结算", partially_settled: "部分结算", matched: "已匹配", discrepancy: "有差异", released: "已释放", captured: "已扣取", partially_captured: "部分扣取"
 };
 
 function tone(status: string): "green" | "amber" | "gray" {
-	if (["approved", "incubating", "ready", "launched", "published", "accepted", "paid", "active", "completed", "succeeded", "settled", "calculated"].includes(status)) return "green";
-	if (["enriched", "scored", "under_review", "researching", "validating", "analyzing", "sent", "awaiting_payment", "provisioning", "reserved", "queued", "submitted", "processing", "reconciling", "in_progress", "waiting", "pending"].includes(status)) return "amber";
+	if (["approved", "incubating", "ready", "launched", "published", "accepted", "paid", "active", "completed", "succeeded", "settled", "calculated", "posted", "matched", "released", "captured"].includes(status)) return "green";
+	if (["enriched", "scored", "under_review", "researching", "validating", "analyzing", "sent", "awaiting_payment", "provisioning", "reserved", "queued", "submitted", "processing", "reconciling", "in_progress", "waiting", "pending", "open", "partially_settled", "partially_captured", "discrepancy"].includes(status)) return "amber";
   return "gray";
 }
 
@@ -54,16 +61,17 @@ export default function Page() {
 	const [products, setProducts] = useState<ProductDetail[]>([]);
 	const [quotes, setQuotes] = useState<Quote[]>([]);
 	const [orders, setOrders] = useState<Order[]>([]);
+	const [finance, setFinance] = useState<FinanceOverview>(emptyFinance);
   const [selectedID, setSelectedID] = useState<string | null>(null);
 	const [selectedProductID, setSelectedProductID] = useState<string | null>(null);
 	const [selectedOrderID, setSelectedOrderID] = useState<string | null>(null);
-	const [view, setView] = useState<"opportunities" | "incubations" | "blueprints" | "products" | "transactions">("opportunities");
+	const [view, setView] = useState<"opportunities" | "incubations" | "blueprints" | "products" | "transactions" | "finance">("opportunities");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-		const [opportunityResult, incubationResult, blueprintResult, capabilityResult, providerResult, productResult, quoteResult, orderResult] = await Promise.all([
+		const [opportunityResult, incubationResult, blueprintResult, capabilityResult, providerResult, productResult, quoteResult, orderResult, financeResult] = await Promise.all([
       api.get<Collection<Opportunity>>("/v1/opportunities"),
       api.get<Collection<Incubation>>("/v1/incubations"),
 			api.get<Collection<Blueprint>>("/v1/blueprints"),
@@ -71,7 +79,8 @@ export default function Page() {
 			api.get<Collection<Provider>>("/v1/providers"),
 			api.get<Collection<Product>>("/v1/products"),
 			api.get<Collection<Quote>>("/v1/quotes"),
-			api.get<Collection<Order>>("/v1/orders")
+			api.get<Collection<Order>>("/v1/orders"),
+			api.get<FinanceOverview>("/v1/finance")
     ]);
 		const productDetails = await Promise.all(productResult.items.map(item => api.get<ProductDetail>(`/v1/products/${item.id}`)));
     setOpportunities(opportunityResult.items);
@@ -82,6 +91,7 @@ export default function Page() {
 		setProducts(productDetails);
 		setQuotes(quoteResult.items);
 		setOrders(orderResult.items);
+		setFinance(financeResult);
     setSelectedID(current => current ?? opportunityResult.items[0]?.id ?? null);
 		setSelectedProductID(current => current && productDetails.some(item => item.id === current) ? current : productDetails[0]?.id ?? null);
 		setSelectedOrderID(current => current && orderResult.items.some(item => item.id === current) ? current : orderResult.items[0]?.id ?? null);
@@ -120,6 +130,7 @@ export default function Page() {
 		setProducts([]);
 		setQuotes([]);
 		setOrders([]);
+		setFinance(emptyFinance);
 	}
 
   const selected = useMemo(() => opportunities.find(item => item.id === selectedID) ?? null, [opportunities, selectedID]);
@@ -280,6 +291,7 @@ export default function Page() {
         <button className={`tab ${view === "blueprints" ? "active" : ""}`} onClick={() => setView("blueprints")}>业务蓝图</button>
 				<button className={`tab ${view === "products" ? "active" : ""}`} onClick={() => setView("products")}>产品工厂</button>
 				<button className={`tab ${view === "transactions" ? "active" : ""}`} onClick={() => setView("transactions")}>交易执行</button>
+				<button className={`tab ${view === "finance" ? "active" : ""}`} onClick={() => setView("finance")}>财务</button>
       </div>
       {loading ? <div className="loading">正在读取 Core API...</div> : view === "opportunities" ?
         <OpportunityWorkspace opportunities={opportunities} selected={selected} selectedID={selectedID} busy={busy}
@@ -297,7 +309,7 @@ export default function Page() {
 							onSKU={event => selectedProduct && submitForm(event, values => api.command(`/v1/products/${selectedProduct.id}/skus`, { code: values.get("code"), name: values.get("name") }))}
 							onSKUVersion={(skuID, productVersionID) => execute(() => api.command(`/v1/skus/${skuID}/versions`, { product_version_id: productVersionID, entitlements: {} }))}
 							onPublish={(productID, productVersionID) => execute(() => api.command(`/v1/products/${productID}/publications`, { product_version_id: productVersionID }))} /> :
-							<TransactionWorkspace quotes={quotes} orders={orders} selected={selectedOrder} selectedID={selectedOrderID} orderableSKUs={orderableSKUs} providers={providers} busy={busy} onSelect={setSelectedOrderID} onQuote={createQuote}
+							view === "transactions" ? <TransactionWorkspace quotes={quotes} orders={orders} holds={finance.holds} selected={selectedOrder} selectedID={selectedOrderID} orderableSKUs={orderableSKUs} providers={providers} busy={busy} onSelect={setSelectedOrderID} onQuote={createQuote}
 								onQuoteTransition={(id, to) => execute(() => api.command(`/v1/quotes/${id}/transitions`, { to }))}
 								onOrder={(quoteVersionID) => execute(() => api.command("/v1/orders", { quote_version_id: quoteVersionID }))}
 								onOrderTransition={(id, to) => execute(() => api.command(`/v1/orders/${id}/transitions`, { to }))}
@@ -305,7 +317,8 @@ export default function Page() {
 								onDelivery={(id, to) => execute(() => api.command(`/v1/deliveries/${id}/transitions`, { to }))}
 								onUsage={(id, quantity) => execute(() => api.command(`/v1/executions/${id}/usage`, { quantity, occurred_at: new Date().toISOString() }))}
 								onCost={(id, providerEndpointID, currency, amountMinor) => execute(() => api.command(`/v1/executions/${id}/provider-costs`, { provider_endpoint_id: providerEndpointID, currency, amount_minor: amountMinor }))}
-								onCharge={id => execute(() => api.command(`/v1/executions/${id}/customer-charges`, {}))} />}
+								onCharge={id => execute(() => api.command(`/v1/executions/${id}/customer-charges`, {}))} /> :
+								<FinanceWorkspace finance={finance} orders={orders} busy={busy} canAdjust={session.role === "admin"} onCommand={(path, body) => execute(() => api.command(path, body))} />}
     </section>
   </PortalShell>;
 }
@@ -376,6 +389,7 @@ function BlueprintRecords({ items, busy, onAdvance }: { items: Blueprint[]; busy
 type TransactionWorkspaceProps = {
 	quotes: Quote[];
 	orders: Order[];
+	holds: FinanceOverview["holds"];
 	selected: Order | null;
 	selectedID: string | null;
 	orderableSKUs: { id: string; label: string }[];
@@ -400,9 +414,10 @@ function TransactionWorkspace(props: TransactionWorkspaceProps) {
 	const deliveryNext: Record<string, string> = { created: "in_progress", in_progress: "completed", waiting: "in_progress", failed: "in_progress" };
 	const selected = props.selected;
 	const selectedNext = selected ? orderNext[selected.status] : undefined;
+	const paymentReady = selected ? props.holds.filter(item => item.order_id === selected.id && ["active", "partially_captured"].includes(item.status)).reduce((total, item) => total + item.remaining_minor, 0) >= selected.amount_minor : false;
 	const activationReady = selected ? selected.executions.length > 0 && selected.executions.every(item => ["succeeded", "reconciling", "settled"].includes(item.status)) && selected.deliveries.every(item => item.status === "completed") : false;
 	const completionReady = selected ? selected.executions.length > 0 && selected.executions.every(item => item.status === "settled") : false;
-	const orderAdvanceReady = selectedNext === "active" ? activationReady : selectedNext === "completed" ? completionReady : true;
+	const orderAdvanceReady = selectedNext === "paid" ? paymentReady : selectedNext === "active" ? activationReady : selectedNext === "completed" ? completionReady : true;
 
 	return <div className="transaction-layout">
 		<section className="factory-band">
@@ -435,7 +450,7 @@ function TransactionWorkspace(props: TransactionWorkspaceProps) {
 		</div>
 
 		{selected && <section className="factory-band">
-			<div className="panel-title"><h2>订单 {selected.id.slice(0, 8)}</h2><div className="button-row"><StatusBadge tone={tone(selected.status)}>{statusLabel[selected.status] ?? selected.status}</StatusBadge>{selectedNext && <button className="button primary" disabled={props.busy || !orderAdvanceReady} onClick={() => props.onOrderTransition(selected.id, selectedNext)}>推进至{statusLabel[selectedNext] ?? selectedNext}</button>}</div></div>
+			<div className="panel-title"><h2>订单 {selected.id.slice(0, 8)}</h2><div className="button-row"><StatusBadge tone={tone(selected.status)}>{statusLabel[selected.status] ?? selected.status}</StatusBadge>{selectedNext && <button className="button primary" title={selectedNext === "paid" && !paymentReady ? "请先在财务工作区冻结足额资金" : undefined} disabled={props.busy || !orderAdvanceReady} onClick={() => props.onOrderTransition(selected.id, selectedNext)}>推进至{statusLabel[selectedNext] ?? selectedNext}</button>}</div></div>
 			<div className="release-strip"><div><span>订单金额</span><strong>{selected.currency} {selected.amount_minor}</strong></div><div><span>订阅 / 权益</span><strong>{selected.subscriptions.length} / {selected.entitlements.length}</strong></div><div><span>用量 / 成本 / 收费</span><strong>{selected.usage.length} / {selected.provider_costs.length} / {selected.customer_charges.length}</strong></div></div>
 
 			<div className="transaction-section"><h3>执行订单</h3>{selected.executions.length ? selected.executions.map(execution => {
@@ -450,6 +465,94 @@ function TransactionWorkspace(props: TransactionWorkspaceProps) {
 
 			<div className="transaction-section"><h3>交付项目</h3>{selected.deliveries.length ? selected.deliveries.map(delivery => { const next = deliveryNext[delivery.status]; return <div className="transaction-row" key={delivery.id}><div><strong>{delivery.mode}</strong><small>{delivery.id.slice(0, 8)}</small></div><StatusBadge tone={tone(delivery.status)}>{statusLabel[delivery.status] ?? delivery.status}</StatusBadge>{next ? <button className="button" disabled={props.busy} onClick={() => props.onDelivery(delivery.id, next)}>推进至{statusLabel[next] ?? next}</button> : <span className="muted">已结束</span>}</div>; }) : <div className="empty-feature">订单进入履约后生成交付记录</div>}</div>
 		</section>}
+	</div>;
+}
+
+type FinanceWorkspaceProps = {
+	finance: FinanceOverview;
+	orders: Order[];
+	busy: boolean;
+	canAdjust: boolean;
+	onCommand: (path: string, body: unknown) => Promise<unknown>;
+};
+
+function FinanceWorkspace(props: FinanceWorkspaceProps) {
+	const payableOrders = props.orders.filter(order => ["created", "awaiting_payment"].includes(order.status));
+	const charges = props.orders.flatMap(order => order.customer_charges.map(charge => ({ ...charge, customer_id: order.customer_id })));
+	const costs = props.orders.flatMap(order => order.provider_costs.map(cost => ({ ...cost, customer_id: order.customer_id })));
+	const openPayableSources = [
+		...props.finance.provider_payables.filter(item => ["open", "partially_settled"].includes(item.status)).map(item => ({ type: "provider_payable", id: item.id, label: `Provider ${item.provider_id.slice(0, 8)}`, currency: item.currency, outstanding: item.amount_minor - item.settled_minor })),
+		...props.finance.commissions.filter(item => ["open", "partially_settled"].includes(item.status)).map(item => ({ type: "commission", id: item.id, label: `${item.beneficiary_type} ${item.beneficiary_id}`, currency: item.currency, outstanding: item.amount_minor - item.settled_minor }))
+	];
+
+	function submit(event: FormEvent<HTMLFormElement>, path: string, build: (values: FormData) => unknown) {
+		event.preventDefault();
+		const form = event.currentTarget;
+		void props.onCommand(path, build(new FormData(form))).then(() => form.reset());
+	}
+
+	return <div className="finance-layout">
+		<section className="factory-band">
+			<div className="panel-title"><h2>钱包与资金冻结</h2><span className="muted">{props.finance.wallets.length} 个钱包 · {props.finance.holds.filter(item => item.remaining_minor > 0).length} 笔在途冻结</span></div>
+			<div className="finance-control-grid">
+				<form className="inline-form" onSubmit={event => submit(event, "/v1/wallets", values => ({ owner_type: "customer", owner_id: values.get("owner_id"), currency: values.get("currency") }))}>
+					<label className="field"><span>客户</span><input name="owner_id" required /></label>
+					<label className="field"><span>币种</span><input name="currency" minLength={3} maxLength={3} defaultValue="USD" required /></label>
+					<button className="button primary" disabled={props.busy}>创建客户钱包</button>
+				</form>
+				{props.canAdjust && <form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); const walletID = String(values.get("wallet_id")); void props.onCommand(`/v1/wallets/${walletID}/adjustments`, { direction: "credit", amount_minor: Number(values.get("amount_minor")), reason: values.get("reason") }); }}>
+					<label className="field"><span>钱包</span><select name="wallet_id" required defaultValue=""><option value="" disabled>选择钱包</option>{props.finance.wallets.map(item => <option key={item.id} value={item.id}>{item.owner_id} · {item.currency}</option>)}</select></label>
+					<label className="field"><span>入账金额</span><input name="amount_minor" type="number" min="1" required /></label>
+					<label className="field"><span>调整原因</span><input name="reason" required /></label>
+					<button className="button" disabled={props.busy || !props.finance.wallets.length}>管理员入账</button>
+				</form>}
+				<form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); const orderID = String(values.get("order_id")); void props.onCommand(`/v1/orders/${orderID}/holds`, { wallet_id: values.get("wallet_id"), amount_minor: Number(values.get("amount_minor")) }); }}>
+					<label className="field"><span>待支付订单</span><select name="order_id" required defaultValue=""><option value="" disabled>选择订单</option>{payableOrders.map(item => <option key={item.id} value={item.id}>{item.customer_id} · {item.currency} {item.amount_minor}</option>)}</select></label>
+					<label className="field"><span>客户钱包</span><select name="wallet_id" required defaultValue=""><option value="" disabled>选择钱包</option>{props.finance.wallets.filter(item => item.owner_type === "customer" && item.status === "active").map(item => <option key={item.id} value={item.id}>{item.owner_id} · 可用 {item.currency} {item.available_minor}</option>)}</select></label>
+					<label className="field"><span>冻结金额</span><input name="amount_minor" type="number" min="1" required /></label>
+					<button className="button primary" disabled={props.busy || !payableOrders.length || !props.finance.wallets.length}>冻结资金</button>
+				</form>
+			</div>
+			<div style={{ overflowX: "auto" }}><table className="data-grid finance-table"><thead><tr><th>所有者</th><th>币种</th><th>可用</th><th>冻结</th><th>状态</th></tr></thead><tbody>{props.finance.wallets.map(item => <tr key={item.id}><td><strong>{item.owner_id}</strong><div className="muted">{item.owner_type} · {item.id.slice(0, 8)}</div></td><td>{item.currency}</td><td>{item.available_minor}</td><td>{item.held_minor}</td><td><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge></td></tr>)}</tbody></table></div>
+			{props.finance.holds.length > 0 && <div className="finance-action-list">{props.finance.holds.map(item => <div className="transaction-row" key={item.id}><div><strong>订单 {item.order_id.slice(0, 8)}</strong><small>{item.currency} {item.amount_minor} · 已扣 {item.captured_minor} · 已释放 {item.released_minor}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge>{item.remaining_minor > 0 ? <button className="button" disabled={props.busy} onClick={() => void props.onCommand(`/v1/holds/${item.id}/releases`, { amount_minor: 0 })}>释放余额 {item.remaining_minor}</button> : <span className="muted">余额 0</span>}</div>)}</div>}
+		</section>
+
+		<section className="factory-band">
+			<div className="panel-title"><h2>收费、应付与佣金</h2><span className="muted">业务事实与账本分录独立关联</span></div>
+			<div className="finance-columns">
+				<div><h3>客户收费</h3><div className="transaction-rows">{charges.length ? charges.map(charge => {
+					const hold = props.finance.holds.find(item => item.order_id === charge.order_id && item.currency === charge.currency && ["active", "partially_captured"].includes(item.status) && item.remaining_minor >= charge.amount_minor);
+					const hasCommission = props.finance.commissions.some(item => item.customer_charge_id === charge.id && item.status !== "reversed");
+					const wallet = props.finance.wallets.find(item => item.owner_type === "customer" && item.owner_id === charge.customer_id && item.currency === charge.currency);
+					return <div className="finance-fact" key={charge.id}><div className="transaction-row"><div><strong>{charge.customer_id}</strong><small>{charge.currency} {charge.amount_minor} · {charge.id.slice(0, 8)}</small></div><StatusBadge tone={tone(charge.status)}>{statusLabel[charge.status] ?? charge.status}</StatusBadge><div className="button-row">{charge.status === "calculated" && hold && <button className="button primary" disabled={props.busy} onClick={() => void props.onCommand(`/v1/customer-charges/${charge.id}/postings`, { hold_id: hold.id })}>正式扣费</button>}{charge.status === "calculated" && !hold && <span className="muted">待足额冻结</span>}{charge.status === "posted" && !hasCommission && <button className="button" disabled={props.busy} onClick={() => void props.onCommand(`/v1/customer-charges/${charge.id}/commissions`, { beneficiary_type: "reseller", beneficiary_id: "Test Reseller", amount_minor: Math.max(1, Math.floor(charge.amount_minor / 10)) })}>记录佣金</button>}</div></div>{charge.status === "posted" && wallet && <form className="finance-refund" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); void props.onCommand(`/v1/customer-charges/${charge.id}/refunds`, { wallet_id: wallet.id, amount_minor: Number(values.get("amount_minor")), reason: values.get("reason") }); }}><input name="amount_minor" type="number" min="1" max={charge.amount_minor} placeholder="退款金额" required /><input name="reason" placeholder="退款原因" required /><button className="button" disabled={props.busy}>退款</button></form>}</div>;
+				}) : <div className="empty-feature">暂无客户收费</div>}</div></div>
+				<div><h3>供应商成本</h3><div className="transaction-rows">{costs.length ? costs.map(cost => { const payable = props.finance.provider_payables.find(item => item.provider_cost_id === cost.id); return <div className="transaction-row" key={cost.id}><div><strong>{cost.currency} {cost.amount_minor}</strong><small>ProviderCost {cost.id.slice(0, 8)}</small></div><StatusBadge tone={payable ? tone(payable.status) : "amber"}>{payable ? statusLabel[payable.status] ?? payable.status : "待入应付"}</StatusBadge>{payable ? <span className="muted">应付 {payable.amount_minor - payable.settled_minor}</span> : <button className="button primary" disabled={props.busy} onClick={() => void props.onCommand(`/v1/provider-costs/${cost.id}/payables`, {})}>确认应付</button>}</div>; }) : <div className="empty-feature">暂无供应商成本</div>}</div></div>
+			</div>
+		</section>
+
+		<section className="factory-band">
+			<div className="panel-title"><h2>结算与对账</h2><span className="muted">{props.finance.settlements.length} 笔结算 · {props.finance.reconciliation_runs.length} 次对账</span></div>
+			<div className="finance-control-grid two">
+				<form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); const source = openPayableSources.find(item => `${item.type}:${item.id}` === values.get("source")); if (source) void props.onCommand("/v1/settlements", { source_type: source.type, source_id: source.id, amount_minor: Number(values.get("amount_minor")) }); }}>
+					<label className="field"><span>未结应付</span><select name="source" required defaultValue=""><option value="" disabled>选择应付</option>{openPayableSources.map(item => <option key={`${item.type}:${item.id}`} value={`${item.type}:${item.id}`}>{item.label} · {item.currency} {item.outstanding}</option>)}</select></label>
+					<label className="field"><span>结算金额（0 为全部）</span><input name="amount_minor" type="number" min="0" defaultValue="0" required /></label>
+					<button className="button primary" disabled={props.busy || !openPayableSources.length}>执行结算</button>
+				</form>
+				<form className="inline-form" onSubmit={event => submit(event, "/v1/reconciliation-runs", values => ({ order_id: values.get("order_id") }))}>
+					<label className="field"><span>订单范围</span><select name="order_id" required defaultValue=""><option value="" disabled>选择订单</option>{props.orders.map(item => <option key={item.id} value={item.id}>{item.customer_id} · {item.id.slice(0, 8)}</option>)}</select></label>
+					<button className="button" disabled={props.busy || !props.orders.length}>运行对账</button>
+				</form>
+			</div>
+			<div className="finance-columns">
+				<div><h3>结算记录</h3><div className="transaction-rows">{props.finance.settlements.length ? props.finance.settlements.map(item => <div className="transaction-row" key={item.id}><div><strong>{item.beneficiary_id}</strong><small>{item.source_type} · {item.currency} {item.amount_minor}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge><span className="muted">{item.id.slice(0, 8)}</span></div>) : <div className="empty-feature">暂无结算</div>}</div></div>
+				<div><h3>对账记录</h3><div className="transaction-rows">{props.finance.reconciliation_runs.length ? props.finance.reconciliation_runs.map(item => <div className="transaction-row" key={item.id}><div><strong>订单 {item.order_id?.slice(0, 8) ?? "全部"}</strong><small>核对 {item.checked_count} · 差异 {item.discrepancy_count}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge><span className="muted">{item.id.slice(0, 8)}</span></div>) : <div className="empty-feature">暂无对账</div>}</div></div>
+			</div>
+		</section>
+
+		<section className="factory-band">
+			<div className="panel-title"><h2>只追加账本</h2><span className="muted">{props.finance.accounts.length} 个账户 · {props.finance.transactions.length} 笔交易</span></div>
+			<div style={{ overflowX: "auto" }}><table className="data-grid finance-table"><thead><tr><th>交易</th><th>引用</th><th>借方</th><th>贷方</th><th>时间</th></tr></thead><tbody>{props.finance.transactions.map(item => <tr key={item.id}><td><strong>{item.transaction_type}</strong><div className="muted">{item.id.slice(0, 8)}</div></td><td>{item.reference_type}<div className="muted">{item.reference_id.slice(0, 12)}</div></td><td>{item.entries.filter(entry => entry.direction === "debit").reduce((total, entry) => total + entry.amount_minor, 0)}</td><td>{item.entries.filter(entry => entry.direction === "credit").reduce((total, entry) => total + entry.amount_minor, 0)}</td><td>{new Date(item.created_at).toLocaleString("zh-CN")}</td></tr>)}</tbody></table></div>
+		</section>
 	</div>;
 }
 
