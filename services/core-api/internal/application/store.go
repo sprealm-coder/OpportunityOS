@@ -10,6 +10,7 @@ import (
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/capability"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/catalog"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/finance"
+	"github.com/opportunity-os/opportunity-os/services/core-api/internal/growth"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/incubation"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/opportunity"
 	orderdomain "github.com/opportunity-os/opportunity-os/services/core-api/internal/order"
@@ -124,6 +125,137 @@ type ReconciliationInput struct {
 	OrderID string `json:"order_id"`
 }
 
+type MarketSegmentInput struct {
+	Name       string         `json:"name"`
+	Definition map[string]any `json:"definition"`
+}
+
+type ICPDefinitionInput struct {
+	Name       string         `json:"name"`
+	Definition map[string]any `json:"definition"`
+}
+
+type LeadInput struct {
+	MarketSegmentID string `json:"market_segment_id"`
+	ICPDefinitionID string `json:"icp_definition_id"`
+	Name            string `json:"name"`
+}
+
+type LeadEvidenceInput struct {
+	Kind       string `json:"kind"`
+	Summary    string `json:"summary"`
+	Confidence int    `json:"confidence"`
+	SourceRef  string `json:"source_ref"`
+}
+
+type ContactInput struct {
+	Channel       string         `json:"channel"`
+	Value         string         `json:"value"`
+	ConsentStatus string         `json:"consent_status"`
+	SourceType    string         `json:"source_type"`
+	SourceRef     string         `json:"source_ref"`
+	Evidence      map[string]any `json:"evidence"`
+}
+
+type ProofTemplateInput struct {
+	Name              string            `json:"name"`
+	ProofType         string            `json:"proof_type"`
+	WorkflowVersionID string            `json:"workflow_version_id"`
+	InputSchema       schema.Definition `json:"input_schema"`
+	OutputSchema      schema.Definition `json:"output_schema"`
+	AccessPolicy      map[string]any    `json:"access_policy"`
+	RetentionDays     int               `json:"retention_days"`
+}
+
+type ProofRequestInput struct {
+	TemplateID string         `json:"template_id"`
+	DealID     string         `json:"deal_id"`
+	Input      map[string]any `json:"input"`
+	ExpiresAt  time.Time      `json:"expires_at"`
+}
+
+type ProofGenerationInput struct {
+	Result      map[string]any `json:"result"`
+	ArtifactRef string         `json:"artifact_ref"`
+}
+
+type ProofReviewInput struct {
+	Decision  string `json:"decision"`
+	Rationale string `json:"rationale"`
+}
+
+type CampaignInput struct {
+	MarketSegmentID string `json:"market_segment_id"`
+	Name            string `json:"name"`
+	Channel         string `json:"channel"`
+	Purpose         string `json:"purpose"`
+}
+
+type CampaignStepInput struct {
+	Position   int            `json:"position"`
+	Kind       string         `json:"kind"`
+	Definition map[string]any `json:"definition"`
+}
+
+type CampaignApprovalInput struct {
+	Decision  string `json:"decision"`
+	Rationale string `json:"rationale"`
+}
+
+type SuppressionInput struct {
+	LeadID    string `json:"lead_id"`
+	ContactID string `json:"contact_id"`
+	Channel   string `json:"channel"`
+	Reason    string `json:"reason"`
+	SourceRef string `json:"source_ref"`
+}
+
+type OutreachPlanInput struct {
+	LeadID    string         `json:"lead_id"`
+	StepID    string         `json:"step_id"`
+	ContactID string         `json:"contact_id"`
+	Content   map[string]any `json:"content"`
+}
+
+type OutreachTransitionInput struct {
+	To                string `json:"to"`
+	ExternalMessageID string `json:"external_message_id"`
+}
+
+type ConversationInput struct {
+	LeadID  string `json:"lead_id"`
+	DealID  string `json:"deal_id"`
+	Channel string `json:"channel"`
+}
+
+type ConversationMessageInput struct {
+	Direction string         `json:"direction"`
+	Status    string         `json:"status"`
+	Content   map[string]any `json:"content"`
+}
+
+type DealInput struct {
+	LeadID     string `json:"lead_id"`
+	Name       string `json:"name"`
+	CustomerID string `json:"customer_id"`
+	Currency   string `json:"currency"`
+	ValueMinor int64  `json:"value_minor"`
+}
+
+type ExperimentInput struct {
+	Name                  string         `json:"name"`
+	EntityType            string         `json:"entity_type"`
+	EntityID              string         `json:"entity_id"`
+	Hypothesis            string         `json:"hypothesis"`
+	AllocationBasisPoints int            `json:"allocation_basis_points"`
+	MetricsDefinition     map[string]any `json:"metrics_definition"`
+}
+
+type ExperimentTransitionInput struct {
+	To     string         `json:"to"`
+	Result map[string]any `json:"result"`
+}
+
 type Store interface {
 	CreateSession(context.Context, string, string) (auth.Session, error)
 	ResolveSession(context.Context, string) (auth.Session, error)
@@ -190,4 +322,32 @@ type FinanceStore interface {
 	CreateProviderPayable(context.Context, tenancy.Scope, string, string) (finance.ProviderPayable, error)
 	CreateSettlement(context.Context, tenancy.Scope, SettlementInput, string) (finance.Settlement, error)
 	RunReconciliation(context.Context, tenancy.Scope, ReconciliationInput, string) (finance.ReconciliationRun, error)
+}
+
+type GrowthStore interface {
+	ListGrowth(context.Context, tenancy.Scope) (growth.Overview, error)
+	CreateMarketSegment(context.Context, tenancy.Scope, MarketSegmentInput, string) (growth.MarketSegment, error)
+	CreateICPDefinition(context.Context, tenancy.Scope, string, ICPDefinitionInput, string) (growth.ICPDefinition, error)
+	CreateLead(context.Context, tenancy.Scope, LeadInput, string) (growth.Lead, error)
+	AddLeadEvidence(context.Context, tenancy.Scope, string, LeadEvidenceInput, string) (growth.LeadEvidence, error)
+	TransitionLead(context.Context, tenancy.Scope, string, string, string) (growth.Lead, error)
+	CreateContact(context.Context, tenancy.Scope, string, ContactInput, string) (growth.Contact, error)
+	CreateProofTemplate(context.Context, tenancy.Scope, ProofTemplateInput, string) (growth.ProofTemplate, error)
+	CreateProofRequest(context.Context, tenancy.Scope, string, ProofRequestInput, string) (growth.ProofRequest, error)
+	GenerateProof(context.Context, tenancy.Scope, string, ProofGenerationInput, string) (growth.ProofInstance, error)
+	ReviewProof(context.Context, tenancy.Scope, string, ProofReviewInput, string) (growth.ProofInstance, error)
+	CreateCampaign(context.Context, tenancy.Scope, CampaignInput, string) (growth.Campaign, error)
+	AddCampaignStep(context.Context, tenancy.Scope, string, CampaignStepInput, string) (growth.CampaignStep, error)
+	TransitionCampaign(context.Context, tenancy.Scope, string, string, string) (growth.Campaign, error)
+	ReviewCampaign(context.Context, tenancy.Scope, string, CampaignApprovalInput, string) (growth.Campaign, error)
+	CreateSuppression(context.Context, tenancy.Scope, SuppressionInput, string) (growth.SuppressionEntry, error)
+	PlanOutreach(context.Context, tenancy.Scope, string, OutreachPlanInput, string) (growth.OutreachMessage, error)
+	TransitionOutreach(context.Context, tenancy.Scope, string, OutreachTransitionInput, string) (growth.OutreachMessage, error)
+	CreateConversation(context.Context, tenancy.Scope, ConversationInput, string) (growth.Conversation, error)
+	AddConversationMessage(context.Context, tenancy.Scope, string, ConversationMessageInput, string) (growth.ConversationMessage, error)
+	CreateDeal(context.Context, tenancy.Scope, DealInput, string) (growth.Deal, error)
+	GetDeal(context.Context, tenancy.Scope, string) (growth.Deal, error)
+	TransitionDeal(context.Context, tenancy.Scope, string, string, string) (growth.Deal, error)
+	CreateExperiment(context.Context, tenancy.Scope, ExperimentInput, string) (growth.Experiment, error)
+	TransitionExperiment(context.Context, tenancy.Scope, string, ExperimentTransitionInput, string) (growth.Experiment, error)
 }

@@ -102,7 +102,7 @@ func loadSaleBinding(ctx context.Context, tx pgx.Tx, tenantID, skuVersionID stri
 
 func scanQuote(row rowScanner) (orderdomain.Quote, error) {
 	var item orderdomain.Quote
-	err := row.Scan(&item.ID, &item.TenantID, &item.DealID, &item.CustomerID, &item.Status, &item.Version, &item.CreatedBy, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.TenantID, &item.DealID, &item.CanonicalDealID, &item.CustomerID, &item.Status, &item.Version, &item.CreatedBy, &item.CreatedAt, &item.UpdatedAt)
 	item.Versions = []orderdomain.QuoteVersion{}
 	return item, err
 }
@@ -165,7 +165,7 @@ func loadQuoteVersions(ctx context.Context, tx pgx.Tx, tenantID, quoteID string)
 }
 
 func getQuote(ctx context.Context, tx pgx.Tx, tenantID, quoteID string, lock bool) (orderdomain.Quote, error) {
-	query := `SELECT id,tenant_id,deal_id,customer_id,status,version,created_by,created_at,updated_at FROM quotes WHERE tenant_id=$1 AND id=$2`
+	query := `SELECT id,tenant_id,deal_id,COALESCE(growth_deal_id::text,''),customer_id,status,version,created_by,created_at,updated_at FROM quotes WHERE tenant_id=$1 AND id=$2`
 	if lock {
 		query += ` FOR UPDATE`
 	}
@@ -186,6 +186,23 @@ func (s *Store) CreateQuote(ctx context.Context, scope tenancy.Scope, input appl
 		return orderdomain.Quote{}, platform.Invalid("invalid_quote_expiry", "quote expiry must be in the future")
 	}
 	return runCommand(ctx, s, scope, key, "quote.create", func(tx pgx.Tx) (orderdomain.Quote, string, error) {
+		canonicalDealID := ""
+		var dealCustomerID, dealStatus, dealCurrency string
+		dealErr := tx.QueryRow(ctx, `SELECT id::text,customer_id,status,currency FROM deals WHERE tenant_id=$1 AND id::text=$2`, scope.TenantID, input.DealID).Scan(&canonicalDealID, &dealCustomerID, &dealStatus, &dealCurrency)
+		if dealErr != nil && dealErr != pgx.ErrNoRows {
+			return orderdomain.Quote{}, "", dealErr
+		}
+		if dealErr == nil {
+			if dealCustomerID != input.CustomerID {
+				return orderdomain.Quote{}, "", platform.Invalid("deal_customer_mismatch", "canonical deal and quote customer must match")
+			}
+			if dealStatus != "open" && dealStatus != "proposal" {
+				return orderdomain.Quote{}, "", platform.Invalid("deal_closed", "closed canonical deal cannot accept a quote")
+			}
+			if strings.TrimSpace(dealCurrency) != input.Currency {
+				return orderdomain.Quote{}, "", platform.Invalid("deal_currency_mismatch", "canonical deal and quote currency must match")
+			}
+		}
 		bindings := make([]saleBinding, len(input.Items))
 		var total int64
 		for index, itemInput := range input.Items {
@@ -202,7 +219,7 @@ func (s *Store) CreateQuote(ctx context.Context, scope tenancy.Scope, input appl
 			total += binding.AmountMinor
 			bindings[index] = binding
 		}
-		quote, err := scanQuote(tx.QueryRow(ctx, `INSERT INTO quotes (tenant_id,deal_id,customer_id,status,version,created_by) VALUES($1,$2,$3,'draft',1,$4) RETURNING id,tenant_id,deal_id,customer_id,status,version,created_by,created_at,updated_at`, scope.TenantID, input.DealID, input.CustomerID, scope.ActorID))
+		quote, err := scanQuote(tx.QueryRow(ctx, `INSERT INTO quotes (tenant_id,deal_id,growth_deal_id,customer_id,status,version,created_by) VALUES($1,$2,$3,$4,'draft',1,$5) RETURNING id,tenant_id,deal_id,COALESCE(growth_deal_id::text,''),customer_id,status,version,created_by,created_at,updated_at`, scope.TenantID, input.DealID, nullableUUID(canonicalDealID), input.CustomerID, scope.ActorID))
 		if err != nil {
 			return quote, "", err
 		}
@@ -230,10 +247,10 @@ func (s *Store) CreateQuote(ctx context.Context, scope tenancy.Scope, input appl
 			version.Items = append(version.Items, item)
 		}
 		quote.Versions = []orderdomain.QuoteVersion{version}
-		if err = appendAudit(ctx, tx, scope, "quote.create", "quote", quote.ID, key, map[string]any{"quote_version_id": version.ID, "amount_minor": total, "currency": input.Currency}); err != nil {
+		if err = appendAudit(ctx, tx, scope, "quote.create", "quote", quote.ID, key, map[string]any{"quote_version_id": version.ID, "growth_deal_id": canonicalDealID, "amount_minor": total, "currency": input.Currency}); err != nil {
 			return quote, "", err
 		}
-		if err = appendEvent(ctx, tx, scope, "quote", quote.ID, "quote.created", quote.Version, map[string]any{"quote_version_id": version.ID, "amount_minor": total, "currency": input.Currency}); err != nil {
+		if err = appendEvent(ctx, tx, scope, "quote", quote.ID, "quote.created", quote.Version, map[string]any{"quote_version_id": version.ID, "growth_deal_id": canonicalDealID, "amount_minor": total, "currency": input.Currency}); err != nil {
 			return quote, "", err
 		}
 		return quote, quote.ID, nil
@@ -242,7 +259,7 @@ func (s *Store) CreateQuote(ctx context.Context, scope tenancy.Scope, input appl
 
 func (s *Store) ListQuotes(ctx context.Context, scope tenancy.Scope) ([]orderdomain.Quote, error) {
 	return runTenantRead(ctx, s, scope.TenantID, func(tx pgx.Tx) ([]orderdomain.Quote, error) {
-		rows, err := tx.Query(ctx, `SELECT id,tenant_id,deal_id,customer_id,status,version,created_by,created_at,updated_at FROM quotes WHERE tenant_id=$1 ORDER BY updated_at DESC,id LIMIT 200`, scope.TenantID)
+		rows, err := tx.Query(ctx, `SELECT id,tenant_id,deal_id,COALESCE(growth_deal_id::text,''),customer_id,status,version,created_by,created_at,updated_at FROM quotes WHERE tenant_id=$1 ORDER BY updated_at DESC,id LIMIT 200`, scope.TenantID)
 		if err != nil {
 			return nil, err
 		}

@@ -6,6 +6,7 @@ import {
 	type Capability,
   type Collection,
 	type FinanceOverview,
+	type GrowthOverview,
   type Incubation,
   type Opportunity,
 	type Product,
@@ -25,7 +26,12 @@ const emptyFinance: FinanceOverview = {
 	provider_payables: [], settlements: [], reconciliation_runs: []
 };
 
-const nav = ["运行概览", "机会审核", "孵化项目", "业务蓝图", "产品发布", "交易执行", "财务对账"].map(label => ({ label, href: "#workspace" }));
+const emptyGrowth: GrowthOverview = {
+	segments: [], icps: [], leads: [], evidence: [], contacts: [], proof_templates: [], proof_requests: [],
+	proof_instances: [], campaigns: [], suppressions: [], outreach: [], conversations: [], deals: [], experiments: []
+};
+
+const nav = ["运行概览", "机会审核", "孵化项目", "业务蓝图", "产品发布", "增长销售", "交易执行", "财务对账"].map(label => ({ label, href: "#workspace" }));
 const statusLabel: Record<string, string> = {
   detected: "待补充证据", enriched: "待评分", scored: "待送审", under_review: "审核中",
   approved: "已批准", incubating: "孵化中", rejected: "已拒绝", archived: "已归档",
@@ -35,7 +41,10 @@ const statusLabel: Record<string, string> = {
 	created: "已创建", awaiting_payment: "待支付", paid: "已支付", provisioning: "履约中", active: "已生效", completed: "已完成",
 	reserved: "已预留", queued: "已排队", submitted: "已提交", processing: "处理中", succeeded: "已成功", failed: "失败", reconciling: "对账中", settled: "已结算",
 	in_progress: "进行中", waiting: "等待中", calculated: "已计算", pending: "待生效", posted: "已入账", reversed: "已冲退",
-	open: "待结算", partially_settled: "部分结算", matched: "已匹配", discrepancy: "有差异", released: "已释放", captured: "已扣取", partially_captured: "部分扣取"
+	open: "待结算", partially_settled: "部分结算", matched: "已匹配", discrepancy: "有差异", released: "已释放", captured: "已扣取", partially_captured: "部分扣取",
+	discovered: "待丰富", qualified: "已认定", proof_requested: "Proof 待生成", proof_ready: "Proof 就绪", approved_for_outreach: "可计划触达",
+	contacted: "已联系", replied: "已回复", meeting: "会谈中", proposal: "提案中", won: "已赢单", lost: "已流失", suppressed: "禁止联系",
+	pending_approval: "待审批", paused: "已暂停", planned: "已计划", blocked: "已阻止", running: "运行中"
 };
 
 function tone(status: string): "green" | "amber" | "gray" {
@@ -62,16 +71,17 @@ export default function Page() {
 	const [quotes, setQuotes] = useState<Quote[]>([]);
 	const [orders, setOrders] = useState<Order[]>([]);
 	const [finance, setFinance] = useState<FinanceOverview>(emptyFinance);
+	const [growth, setGrowth] = useState<GrowthOverview>(emptyGrowth);
   const [selectedID, setSelectedID] = useState<string | null>(null);
 	const [selectedProductID, setSelectedProductID] = useState<string | null>(null);
 	const [selectedOrderID, setSelectedOrderID] = useState<string | null>(null);
-	const [view, setView] = useState<"opportunities" | "incubations" | "blueprints" | "products" | "transactions" | "finance">("opportunities");
+	const [view, setView] = useState<"opportunities" | "incubations" | "blueprints" | "products" | "growth" | "transactions" | "finance">("opportunities");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-		const [opportunityResult, incubationResult, blueprintResult, capabilityResult, providerResult, productResult, quoteResult, orderResult, financeResult] = await Promise.all([
+		const [opportunityResult, incubationResult, blueprintResult, capabilityResult, providerResult, productResult, quoteResult, orderResult, financeResult, growthResult] = await Promise.all([
       api.get<Collection<Opportunity>>("/v1/opportunities"),
       api.get<Collection<Incubation>>("/v1/incubations"),
 			api.get<Collection<Blueprint>>("/v1/blueprints"),
@@ -80,7 +90,8 @@ export default function Page() {
 			api.get<Collection<Product>>("/v1/products"),
 			api.get<Collection<Quote>>("/v1/quotes"),
 			api.get<Collection<Order>>("/v1/orders"),
-			api.get<FinanceOverview>("/v1/finance")
+			api.get<FinanceOverview>("/v1/finance"),
+			api.get<GrowthOverview>("/v1/growth")
     ]);
 		const productDetails = await Promise.all(productResult.items.map(item => api.get<ProductDetail>(`/v1/products/${item.id}`)));
     setOpportunities(opportunityResult.items);
@@ -92,6 +103,7 @@ export default function Page() {
 		setQuotes(quoteResult.items);
 		setOrders(orderResult.items);
 		setFinance(financeResult);
+		setGrowth(growthResult);
     setSelectedID(current => current ?? opportunityResult.items[0]?.id ?? null);
 		setSelectedProductID(current => current && productDetails.some(item => item.id === current) ? current : productDetails[0]?.id ?? null);
 		setSelectedOrderID(current => current && orderResult.items.some(item => item.id === current) ? current : orderResult.items[0]?.id ?? null);
@@ -131,6 +143,7 @@ export default function Page() {
 		setQuotes([]);
 		setOrders([]);
 		setFinance(emptyFinance);
+		setGrowth(emptyGrowth);
 	}
 
   const selected = useMemo(() => opportunities.find(item => item.id === selectedID) ?? null, [opportunities, selectedID]);
@@ -282,6 +295,7 @@ export default function Page() {
       <Metric label="待人工审核" value={String(pendingReviews)} detail="需要批准或拒绝" />
       <Metric label="孵化项目" value={String(incubations.length)} detail="版本化阶段门" />
 			<Metric label="已发布产品" value={String(products.filter(item => item.status === "published").length)} detail={`${products.length} 个产品定义`} />
+			<Metric label="增长管道" value={String(growth.leads.length)} detail={`${growth.deals.filter(item => ["open", "proposal"].includes(item.status)).length} 个进行中 Deal`} />
     </div>
 
     <section className="panel" id="workspace">
@@ -290,6 +304,7 @@ export default function Page() {
         <button className={`tab ${view === "incubations" ? "active" : ""}`} onClick={() => setView("incubations")}>孵化项目</button>
         <button className={`tab ${view === "blueprints" ? "active" : ""}`} onClick={() => setView("blueprints")}>业务蓝图</button>
 				<button className={`tab ${view === "products" ? "active" : ""}`} onClick={() => setView("products")}>产品工厂</button>
+				<button className={`tab ${view === "growth" ? "active" : ""}`} onClick={() => setView("growth")}>增长销售</button>
 				<button className={`tab ${view === "transactions" ? "active" : ""}`} onClick={() => setView("transactions")}>交易执行</button>
 				<button className={`tab ${view === "finance" ? "active" : ""}`} onClick={() => setView("finance")}>财务</button>
       </div>
@@ -309,6 +324,7 @@ export default function Page() {
 							onSKU={event => selectedProduct && submitForm(event, values => api.command(`/v1/products/${selectedProduct.id}/skus`, { code: values.get("code"), name: values.get("name") }))}
 							onSKUVersion={(skuID, productVersionID) => execute(() => api.command(`/v1/skus/${skuID}/versions`, { product_version_id: productVersionID, entitlements: {} }))}
 							onPublish={(productID, productVersionID) => execute(() => api.command(`/v1/products/${productID}/publications`, { product_version_id: productVersionID }))} /> :
+							view === "growth" ? <GrowthWorkspace growth={growth} products={products} orderableSKUs={orderableSKUs} busy={busy} canWrite={["admin", "operator"].includes(session.role)} canReview={["admin", "reviewer"].includes(session.role)} onCommand={(path, body) => execute(() => api.command(path, body))} /> :
 							view === "transactions" ? <TransactionWorkspace quotes={quotes} orders={orders} holds={finance.holds} selected={selectedOrder} selectedID={selectedOrderID} orderableSKUs={orderableSKUs} providers={providers} busy={busy} onSelect={setSelectedOrderID} onQuote={createQuote}
 								onQuoteTransition={(id, to) => execute(() => api.command(`/v1/quotes/${id}/transitions`, { to }))}
 								onOrder={(quoteVersionID) => execute(() => api.command("/v1/orders", { quote_version_id: quoteVersionID }))}
@@ -384,6 +400,140 @@ function BlueprintRecords({ items, busy, onAdvance }: { items: Blueprint[]; busy
 	const nextStatus: Record<string, string> = { draft: "analyzing", analyzing: "validating", validating: "approved", approved: "configuring", configuring: "ready", ready: "launched" };
 	if (!items.length) return <div className="empty-feature">暂无记录</div>;
 	return <div className="record-list">{items.map(item => <div className="record-row blueprint-row" key={item.id}><div><strong>{item.name}</strong><small>{item.value_proposition || "待补充价值主张"} · v{item.version}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge>{nextStatus[item.status] ? <button className="button" disabled={busy} onClick={() => onAdvance(item.id, nextStatus[item.status])}>推进至{statusLabel[nextStatus[item.status]] ?? nextStatus[item.status]}</button> : <span className="muted">{item.id.slice(0, 8)}</span>}</div>)}</div>;
+}
+
+type GrowthWorkspaceProps = {
+	growth: GrowthOverview;
+	products: ProductDetail[];
+	orderableSKUs: { id: string; label: string }[];
+	busy: boolean;
+	canWrite: boolean;
+	canReview: boolean;
+	onCommand: (path: string, body: unknown) => Promise<unknown>;
+};
+
+function GrowthWorkspace(props: GrowthWorkspaceProps) {
+	const [formError, setFormError] = useState<string | null>(null);
+	const qualifiedLeads = props.growth.leads.filter(item => !["discovered", "enriched", "won", "lost", "suppressed"].includes(item.status));
+	const outreachLeads = props.growth.leads.filter(item => ["approved_for_outreach", "contacted", "replied"].includes(item.status));
+	const openDeals = props.growth.deals.filter(item => ["open", "proposal"].includes(item.status));
+	const workflowIDs = Array.from(new Set(props.products.flatMap(product => product.versions.map(version => String(version.workflow.id ?? ""))).filter(Boolean)));
+	const leadNext: Record<string, string> = { enriched: "qualified", proof_ready: "approved_for_outreach", replied: "meeting", meeting: "proposal" };
+
+	async function submit(event: FormEvent<HTMLFormElement>, path: string, build: (values: FormData) => unknown) {
+		event.preventDefault();
+		const form = event.currentTarget;
+		setFormError(null);
+		try {
+			await props.onCommand(path, build(new FormData(form)));
+			form.reset();
+		} catch (error) {
+			setFormError(errorMessage(error));
+		}
+	}
+
+	function objectValue(values: FormData, name: string): Record<string, unknown> {
+		const value = JSON.parse(String(values.get(name) ?? "{}"));
+		if (!value || Array.isArray(value) || typeof value !== "object") throw new Error(`${name} 必须是 JSON 对象`);
+		return value as Record<string, unknown>;
+	}
+
+	function entityOptions() {
+		return [
+			...props.growth.segments.map(item => ({ value: `market_segment:${item.id}`, label: `市场细分 · ${item.name}` })),
+			...props.growth.leads.map(item => ({ value: `lead:${item.id}`, label: `潜客 · ${item.name}` })),
+			...props.growth.campaigns.map(item => ({ value: `campaign:${item.id}`, label: `Campaign · ${item.name}` })),
+			...props.growth.deals.map(item => ({ value: `deal:${item.id}`, label: `Deal · ${item.name}` }))
+		];
+	}
+
+	return <div className="factory-layout growth-layout">
+		{formError && <div className="notice error">{formError}</div>}
+		<section className="factory-band">
+			<div className="panel-title"><h2>市场细分与潜客</h2><span className="muted">{props.growth.segments.length} 个细分 · {props.growth.leads.length} 条潜客</span></div>
+			<div className="factory-columns growth-controls">
+				<form className="inline-form" onSubmit={event => submit(event, "/v1/market-segments", values => ({ name: values.get("name"), definition: objectValue(values, "definition") }))}>
+					<input name="name" required placeholder="市场细分名称" /><textarea name="definition" defaultValue={'{"criteria":[]}'} required /><button className="button primary" disabled={props.busy || !props.canWrite}>创建细分</button>
+				</form>
+				<form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); void submit(event, `/v1/market-segments/${values.get("segment_id")}/icps`, data => ({ name: data.get("name"), definition: objectValue(data, "definition") })); }}>
+					<select name="segment_id" required defaultValue=""><option value="" disabled>选择市场细分</option>{props.growth.segments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input name="name" required placeholder="ICP 名称" /><textarea name="definition" defaultValue={'{"signals":[],"constraints":[]}'} required /><button className="button" disabled={props.busy || !props.canWrite || !props.growth.segments.length}>创建 ICP</button>
+				</form>
+				<form className="inline-form" onSubmit={event => submit(event, "/v1/leads", values => ({ market_segment_id: values.get("segment_id"), icp_definition_id: values.get("icp_id"), name: values.get("name") }))}>
+					<select name="segment_id" required defaultValue=""><option value="" disabled>市场细分</option>{props.growth.segments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="icp_id" defaultValue=""><option value="">不绑定 ICP</option>{props.growth.icps.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input name="name" required placeholder="潜客名称" /><button className="button primary" disabled={props.busy || !props.canWrite || !props.growth.segments.length}>创建潜客</button>
+				</form>
+			</div>
+			<div className="growth-two-column">
+				<div>
+					<h3>潜客队列</h3>
+					<div className="transaction-rows">{props.growth.leads.length ? props.growth.leads.map(item => <div className="transaction-row" key={item.id}><div><strong>{item.name}</strong><small>评分 {item.score} · v{item.version}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge>{leadNext[item.status] ? <button className="button" disabled={props.busy || !props.canWrite} onClick={() => void props.onCommand(`/v1/leads/${item.id}/transitions`, { to: leadNext[item.status] })}>推进</button> : <span className="muted">{item.id.slice(0, 8)}</span>}</div>) : <div className="empty-feature">暂无潜客</div>}</div>
+				</div>
+				<div className="growth-stack">
+					<form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); void submit(event, `/v1/leads/${values.get("lead_id")}/evidence`, data => ({ kind: data.get("kind"), summary: data.get("summary"), confidence: Number(data.get("confidence")), source_ref: data.get("source_ref") })); }}>
+						<select name="lead_id" required defaultValue=""><option value="" disabled>选择潜客</option>{props.growth.leads.filter(item => !["won", "lost", "suppressed"].includes(item.status)).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input name="kind" required placeholder="证据类型" /><input name="summary" required placeholder="证据摘要" /><input name="confidence" type="number" min="0" max="100" defaultValue="80" required /><input name="source_ref" placeholder="来源引用" /><button className="button" disabled={props.busy || !props.canWrite}>添加证据</button>
+					</form>
+					<form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); void submit(event, `/v1/leads/${values.get("lead_id")}/contacts`, data => ({ channel: data.get("channel"), value: data.get("value"), consent_status: data.get("consent_status"), source_type: "manual", source_ref: "operator", evidence: {} })); }}>
+						<select name="lead_id" required defaultValue=""><option value="" disabled>选择潜客</option>{props.growth.leads.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="channel" defaultValue="email"><option value="email">Email</option><option value="phone">Phone</option><option value="web">Web</option><option value="custom">Custom</option></select><input name="value" required placeholder="联系值" /><select name="consent_status" defaultValue="unknown"><option value="unknown">未知</option><option value="opted_in">已同意</option><option value="opted_out">已退出</option></select><button className="button" disabled={props.busy || !props.canWrite}>记录联系人</button>
+					</form>
+				</div>
+			</div>
+		</section>
+
+		<section className="factory-band">
+			<div className="panel-title"><h2>Proof 管理</h2><span className="muted">Schema + 工作流 + 人工审核</span></div>
+			<div className="factory-columns growth-controls">
+				<form className="inline-form" onSubmit={event => submit(event, "/v1/proof-templates", values => ({ name: values.get("name"), proof_type: values.get("proof_type"), workflow_version_id: values.get("workflow_id"), input_schema: objectValue(values, "input_schema"), output_schema: objectValue(values, "output_schema"), access_policy: { scope: "tenant" }, retention_days: Number(values.get("retention_days")) }))}>
+					<input name="name" required placeholder="Proof 模板名称" /><select name="proof_type" defaultValue="analysis"><option value="analysis">分析</option><option value="report">报告</option><option value="sample">样本</option><option value="comparison">对比</option><option value="prototype">原型</option><option value="custom">自定义</option></select><select name="workflow_id" required defaultValue=""><option value="" disabled>选择工作流版本</option>{workflowIDs.map(id => <option key={id} value={id}>{id.slice(0, 12)}</option>)}</select><textarea name="input_schema" defaultValue={'{"type":"object","properties":{}}'} required /><textarea name="output_schema" defaultValue={'{"type":"object","properties":{}}'} required /><input name="retention_days" type="number" min="1" defaultValue="30" required /><button className="button primary" disabled={props.busy || !props.canWrite || !workflowIDs.length}>创建模板</button>
+				</form>
+				<form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); void submit(event, `/v1/leads/${values.get("lead_id")}/proof-requests`, data => ({ template_id: data.get("template_id"), deal_id: data.get("deal_id"), input: objectValue(data, "input") })); }}>
+					<select name="lead_id" required defaultValue=""><option value="" disabled>已认定潜客</option>{qualifiedLeads.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="template_id" required defaultValue=""><option value="" disabled>Proof 模板</option>{props.growth.proof_templates.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="deal_id" defaultValue=""><option value="">不绑定 Deal</option>{openDeals.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><textarea name="input" defaultValue="{}" required /><button className="button" disabled={props.busy || !props.canWrite || !qualifiedLeads.length || !props.growth.proof_templates.length}>请求 Proof</button>
+				</form>
+			</div>
+			<div className="transaction-rows">{props.growth.proof_requests.map(request => { const instance = props.growth.proof_instances.find(item => item.proof_request_id === request.id); return <div className="transaction-row" key={request.id}><div><strong>{props.growth.leads.find(item => item.id === request.lead_id)?.name ?? request.lead_id.slice(0, 8)}</strong><small>{props.growth.proof_templates.find(item => item.id === request.template_id)?.name ?? "Proof"} · 到期 {new Date(request.expires_at).toLocaleDateString("zh-CN")}</small></div><StatusBadge tone={tone(request.status)}>{statusLabel[request.status] ?? request.status}</StatusBadge><div className="button-row">{request.status === "requested" && <button className="button" disabled={props.busy || !props.canWrite} onClick={() => void props.onCommand(`/v1/proof-requests/${request.id}/generate`, { result: { summary: "Test Proof Artifact" }, artifact_ref: `proof://${request.id}` })}>生成 Proof</button>}{request.status === "review" && instance && props.canReview && <><button className="button primary" disabled={props.busy} onClick={() => void props.onCommand(`/v1/proof-requests/${request.id}/reviews`, { decision: "approved", rationale: "Proof output verified" })}>批准</button><button className="button" disabled={props.busy} onClick={() => void props.onCommand(`/v1/proof-requests/${request.id}/reviews`, { decision: "rejected", rationale: "Proof requires revision" })}>拒绝</button></>}</div></div>; })}</div>
+		</section>
+
+		<section className="factory-band">
+			<div className="panel-title"><h2>Campaign 与触达计划</h2><StatusBadge tone="amber">外部发送关闭</StatusBadge></div>
+			<div className="factory-columns growth-controls">
+				<form className="inline-form" onSubmit={event => submit(event, "/v1/campaigns", values => ({ market_segment_id: values.get("segment_id"), name: values.get("name"), channel: values.get("channel"), purpose: values.get("purpose") }))}>
+					<select name="segment_id" defaultValue=""><option value="">全部细分</option>{props.growth.segments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input name="name" required placeholder="Campaign 名称" /><select name="channel" defaultValue="email"><option value="email">Email</option><option value="phone">Phone</option><option value="web">Web</option><option value="custom">Custom</option></select><input name="purpose" required placeholder="触达目的" /><button className="button primary" disabled={props.busy || !props.canWrite}>创建 Campaign</button>
+				</form>
+				<form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); void submit(event, `/v1/campaigns/${values.get("campaign_id")}/steps`, data => ({ position: Number(data.get("position")), kind: data.get("kind"), definition: objectValue(data, "definition") })); }}>
+					<select name="campaign_id" required defaultValue=""><option value="" disabled>草稿 Campaign</option>{props.growth.campaigns.filter(item => item.status === "draft").map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input name="position" type="number" min="1" defaultValue="1" required /><select name="kind" defaultValue="message"><option value="message">消息计划</option><option value="wait">等待</option><option value="condition">条件</option><option value="proof_request">Proof 请求</option><option value="manual_task">人工任务</option></select><textarea name="definition" defaultValue={'{"template":"tenant-controlled"}'} required /><button className="button" disabled={props.busy || !props.canWrite}>添加步骤</button>
+				</form>
+			</div>
+			<div className="transaction-rows">{props.growth.campaigns.map(item => <div className="transaction-row" key={item.id}><div><strong>{item.name}</strong><small>{item.channel} · {item.steps.length} 步 · v{item.version}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge><div className="button-row">{item.status === "draft" && <button className="button" disabled={props.busy || !props.canWrite || !item.steps.length} onClick={() => void props.onCommand(`/v1/campaigns/${item.id}/transitions`, { to: "pending_approval" })}>提交审批</button>}{item.status === "pending_approval" && props.canReview && <button className="button primary" disabled={props.busy} onClick={() => void props.onCommand(`/v1/campaigns/${item.id}/reviews`, { decision: "approved", rationale: "Campaign scope and controls verified" })}>批准</button>}{item.status === "approved" && <button className="button primary" disabled={props.busy || !props.canWrite} onClick={() => void props.onCommand(`/v1/campaigns/${item.id}/transitions`, { to: "active" })}>启用计划</button>}</div></div>)}</div>
+			<div className="growth-two-column">
+				<form className="inline-form" onSubmit={event => submit(event, "/v1/suppressions", values => ({ lead_id: values.get("lead_id"), contact_id: values.get("contact_id"), channel: values.get("channel"), reason: values.get("reason"), source_ref: "operator" }))}>
+					<select name="lead_id" defaultValue=""><option value="">不按潜客抑制</option>{props.growth.leads.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="contact_id" defaultValue=""><option value="">不按联系人抑制</option>{props.growth.contacts.filter(item => item.status === "active").map(item => <option key={item.id} value={item.id}>{item.value}</option>)}</select><select name="channel" defaultValue="all"><option value="all">全部渠道</option><option value="email">Email</option><option value="phone">Phone</option><option value="web">Web</option><option value="custom">Custom</option></select><select name="reason" defaultValue="do_not_contact"><option value="do_not_contact">禁止联系</option><option value="opt_out">主动退出</option><option value="bounce">退信</option><option value="complaint">投诉</option><option value="risk">风险</option></select><button className="button" disabled={props.busy || !props.canWrite}>加入抑制</button>
+				</form>
+				<form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); const campaign = props.growth.campaigns.find(item => item.id === values.get("campaign_id")); void submit(event, `/v1/campaigns/${campaign?.id}/outreach`, data => ({ lead_id: data.get("lead_id"), step_id: data.get("step_id"), contact_id: data.get("contact_id"), content: { subject: data.get("subject"), body: data.get("body") } })); }}>
+					<select name="campaign_id" required defaultValue=""><option value="" disabled>已启用 Campaign</option>{props.growth.campaigns.filter(item => item.status === "active").map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="step_id" required defaultValue=""><option value="" disabled>消息步骤</option>{props.growth.campaigns.flatMap(item => item.steps.filter(step => step.kind === "message")).map(item => <option key={item.id} value={item.id}>{item.campaign_id.slice(0, 8)} · 第 {item.position} 步</option>)}</select><select name="lead_id" required defaultValue=""><option value="" disabled>可计划潜客</option>{outreachLeads.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="contact_id" defaultValue=""><option value="">无需联系人</option>{props.growth.contacts.filter(item => item.status === "active").map(item => <option key={item.id} value={item.id}>{item.value}</option>)}</select><input name="subject" required placeholder="主题" /><textarea name="body" required placeholder="计划内容" /><button className="button primary" disabled={props.busy || !props.canWrite}>检查并计划</button>
+				</form>
+			</div>
+			<div className="transaction-rows">{props.growth.outreach.map(item => <div className="transaction-row" key={item.id}><div><strong>{props.growth.leads.find(lead => lead.id === item.lead_id)?.name ?? item.lead_id.slice(0, 8)}</strong><small>{item.block_reason || "已通过抑制与额度检查"}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge>{item.status === "planned" ? <button className="button" disabled={props.busy || !props.canWrite} onClick={() => void props.onCommand(`/v1/outreach/${item.id}/transitions`, { to: "cancelled" })}>取消计划</button> : <span className="muted">不执行发送</span>}</div>)}</div>
+		</section>
+
+		<section className="factory-band">
+			<div className="panel-title"><h2>Conversation、Deal 与实验</h2><span className="muted">Deal 绑定既有 Quote，Order 保持独立</span></div>
+			<div className="factory-columns growth-controls">
+				<form className="inline-form" onSubmit={event => submit(event, "/v1/deals", values => ({ lead_id: values.get("lead_id"), name: values.get("name"), customer_id: values.get("customer_id"), currency: values.get("currency"), value_minor: Number(values.get("value_minor")) }))}>
+					<select name="lead_id" required defaultValue=""><option value="" disabled>选择已认定潜客</option>{qualifiedLeads.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input name="name" required placeholder="Deal 名称" /><input name="customer_id" required defaultValue="Test Customer" /><input name="currency" required minLength={3} maxLength={3} defaultValue="CNY" /><input name="value_minor" type="number" min="0" defaultValue="10000" required /><button className="button primary" disabled={props.busy || !props.canWrite || !qualifiedLeads.length}>创建 Deal</button>
+				</form>
+				<form className="inline-form" onSubmit={event => submit(event, "/v1/conversations", values => ({ lead_id: values.get("lead_id"), deal_id: values.get("deal_id"), channel: values.get("channel") }))}>
+					<select name="lead_id" required defaultValue=""><option value="" disabled>选择潜客</option>{props.growth.leads.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="deal_id" defaultValue=""><option value="">不绑定 Deal</option>{openDeals.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="channel" defaultValue="email"><option value="email">Email</option><option value="phone">Phone</option><option value="web">Web</option><option value="custom">Custom</option></select><button className="button" disabled={props.busy || !props.canWrite}>创建 Conversation</button>
+				</form>
+				<form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); const direction = String(values.get("direction")); void submit(event, `/v1/conversations/${values.get("conversation_id")}/messages`, data => ({ direction, status: direction === "inbound" ? "received" : "draft", content: { text: data.get("text") } })); }}>
+					<select name="conversation_id" required defaultValue=""><option value="" disabled>选择 Conversation</option>{props.growth.conversations.map(item => <option key={item.id} value={item.id}>{props.growth.leads.find(lead => lead.id === item.lead_id)?.name ?? item.id.slice(0, 8)}</option>)}</select><select name="direction" defaultValue="inbound"><option value="inbound">收到回复</option><option value="outbound">外发草稿</option><option value="system">系统记录</option></select><textarea name="text" required placeholder="消息内容" /><button className="button" disabled={props.busy || !props.canWrite}>记录消息</button>
+				</form>
+			</div>
+			<div className="growth-two-column">
+				<div><h3>Deal 与规范报价</h3><div className="transaction-rows">{props.growth.deals.map(item => <div className="transaction-row" key={item.id}><div><strong>{item.name}</strong><small>{item.customer_id} · {item.currency} {item.value_minor}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge><span className="muted">{item.id.slice(0, 8)}</span></div>)}</div>
+					<form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); void submit(event, `/v1/deals/${values.get("deal_id")}/quotes`, data => ({ currency: data.get("currency"), valid_until: new Date(Date.now() + Number(data.get("valid_days")) * 86400000).toISOString(), items: [{ sku_version_id: data.get("sku_version_id"), quantity: Number(data.get("quantity")), input: {} }] })); }}><select name="deal_id" required defaultValue=""><option value="" disabled>开放 Deal</option>{openDeals.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select name="sku_version_id" required defaultValue=""><option value="" disabled>已发布 SKU</option>{props.orderableSKUs.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select><input name="currency" defaultValue="CNY" minLength={3} maxLength={3} required /><input name="quantity" type="number" min="1" defaultValue="1" required /><input name="valid_days" type="number" min="1" defaultValue="7" required /><button className="button primary" disabled={props.busy || !props.canWrite || !openDeals.length || !props.orderableSKUs.length}>创建规范报价</button></form>
+				</div>
+				<div><h3>增长实验</h3><form className="inline-form" onSubmit={event => submit(event, "/v1/experiments", values => { const [entity_type, entity_id] = String(values.get("entity")).split(":"); return { name: values.get("name"), entity_type, entity_id, hypothesis: values.get("hypothesis"), allocation_basis_points: Number(values.get("allocation")), metrics_definition: objectValue(values, "metrics") }; })}><input name="name" required placeholder="实验名称" /><select name="entity" required defaultValue=""><option value="" disabled>实验对象</option>{entityOptions().map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select><textarea name="hypothesis" required placeholder="可证伪假设" /><input name="allocation" type="number" min="0" max="10000" defaultValue="5000" required /><textarea name="metrics" defaultValue={'{"conversion":{"type":"count"}}'} required /><button className="button primary" disabled={props.busy || !props.canWrite || !entityOptions().length}>创建实验</button></form><div className="transaction-rows">{props.growth.experiments.map(item => <div className="transaction-row" key={item.id}><div><strong>{item.name}</strong><small>{item.hypothesis}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge>{item.status === "draft" ? <button className="button" disabled={props.busy || !props.canWrite} onClick={() => void props.onCommand(`/v1/experiments/${item.id}/transitions`, { to: "running", result: {} })}>启动</button> : item.status === "running" ? <button className="button" disabled={props.busy || !props.canWrite} onClick={() => void props.onCommand(`/v1/experiments/${item.id}/transitions`, { to: "completed", result: { outcome: "recorded" } })}>完成</button> : <span className="muted">v{item.version}</span>}</div>)}</div></div>
+			</div>
+		</section>
+	</div>;
 }
 
 type TransactionWorkspaceProps = {

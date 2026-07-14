@@ -19,10 +19,16 @@
 - PostgreSQL-backed Hold, Release, CustomerCharge posting, Refund, Commission, ProviderPayable, Settlement, and Reconciliation commands.
 - Deferred debit/credit balance enforcement, immutable runtime ledger history, account locking, and append-only balance snapshots.
 - Finance permissions, OpenAPI `0.5.0`, shared TypeScript contracts, and operator/admin finance views.
+- PostgreSQL migration `000009_growth_engine` for MarketSegment, ICPDefinition, Lead, LeadEvidence, Contact provenance, generic Proof, Campaign approval, suppression, quotas, outreach plans, Conversation, Deal, and Experiment.
+- Product-agnostic GrowthStore commands with tenant RLS, idempotency, audit, Outbox, state-machine, retention, consent, suppression, quota, and approval enforcement.
+- Canonical `quotes.growth_deal_id` binding while retaining historical/external `quotes.deal_id` compatibility.
+- Authenticated growth APIs, OpenAPI `0.6.0`, and shared TypeScript/Zod growth contracts.
+- Operator growth-sales workspace and admin growth-governance view; outbound delivery remains visibly disabled.
+- PostgreSQL phase F acceptance test covering Segment through canonical Quote and Experiment, including cross-tenant isolation and suppression-blocked outreach.
 
 ### Changed
 
 - Browser clients now derive tenant and actor from trusted sessions instead of request headers.
 - Growth Quote now aliases the canonical transaction-domain Quote instead of defining a duplicate model.
 - Orders now require sufficient active held funds before payment, and executions require posted charges and provider payables before settlement.
-- The next development boundary advances to phase F product-agnostic growth persistence: MarketSegment, ICP, Lead, Evidence, Proof, Campaign, Conversation, Deal, and Experiment.
+- The next development boundary advances to phase G reseller ownership, supplier settlement, developer listing, review, sandbox, dispute, and takedown workflows.

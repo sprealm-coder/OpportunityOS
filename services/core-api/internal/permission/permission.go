@@ -36,6 +36,16 @@ const (
 	LedgerPost          = "ledger.post"
 	SettlementWrite     = "settlement.write"
 	ReconciliationWrite = "reconciliation.write"
+	GrowthRead          = "growth.read"
+	GrowthWrite         = "growth.write"
+	LeadWrite           = "lead.write"
+	ProofWrite          = "proof.write"
+	ProofReview         = "proof.review"
+	CampaignWrite       = "campaign.write"
+	CampaignApprove     = "campaign.approve"
+	OutreachWrite       = "outreach.write"
+	DealWrite           = "deal.write"
+	ExperimentWrite     = "experiment.write"
 )
 
 var rolePermissions = map[string]map[string]bool{
@@ -50,9 +60,11 @@ var rolePermissions = map[string]map[string]bool{
 		ExecutionWrite: true, BillingWrite: true,
 		FinanceRead: true, WalletWrite: true, LedgerPost: true,
 		SettlementWrite: true, ReconciliationWrite: true,
+		GrowthRead: true, GrowthWrite: true, LeadWrite: true, ProofWrite: true,
+		CampaignWrite: true, OutreachWrite: true, DealWrite: true, ExperimentWrite: true,
 	},
-	"reviewer": {OpportunityRead: true, OpportunityReview: true, ProductRead: true, TransactionRead: true, FinanceRead: true, AuditRead: true},
-	"auditor":  {OpportunityRead: true, IncubationRead: true, BlueprintRead: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, TransactionRead: true, FinanceRead: true, AuditRead: true},
+	"reviewer": {OpportunityRead: true, OpportunityReview: true, ProductRead: true, TransactionRead: true, FinanceRead: true, GrowthRead: true, ProofReview: true, CampaignApprove: true, AuditRead: true},
+	"auditor":  {OpportunityRead: true, IncubationRead: true, BlueprintRead: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, TransactionRead: true, FinanceRead: true, GrowthRead: true, AuditRead: true},
 }
 
 func RequireRole(role, required string) error {

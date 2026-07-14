@@ -121,6 +121,37 @@ var Lead = New("lead", map[string][]string{
 	"proposal":              {"won", "lost", "suppressed"},
 })
 
+var ProofRequest = New("proof_request", map[string][]string{
+	"requested":  {"processing", "expired", "deleted"},
+	"processing": {"review", "rejected", "expired"},
+	"review":     {"ready", "rejected", "expired"},
+	"ready":      {"expired", "deleted"},
+})
+
+var Campaign = New("campaign", map[string][]string{
+	"draft":            {"pending_approval", "cancelled"},
+	"pending_approval": {"approved", "rejected", "cancelled"},
+	"approved":         {"active", "cancelled"},
+	"active":           {"paused", "completed", "cancelled"},
+	"paused":           {"active", "completed", "cancelled"},
+})
+
+var Deal = New("deal", map[string][]string{
+	"open":     {"proposal", "lost", "cancelled"},
+	"proposal": {"won", "lost", "cancelled"},
+})
+
+var Experiment = New("experiment", map[string][]string{
+	"draft":   {"running", "cancelled"},
+	"running": {"completed", "cancelled"},
+})
+
+var Outreach = New("outreach_message", map[string][]string{
+	"planned":   {"sent", "cancelled"},
+	"sent":      {"delivered", "replied", "bounced", "complained"},
+	"delivered": {"replied", "bounced", "complained"},
+})
+
 var Listing = New("listing", map[string][]string{
 	"draft":            {"submitted", "removed"},
 	"submitted":        {"automated_review", "removed"},

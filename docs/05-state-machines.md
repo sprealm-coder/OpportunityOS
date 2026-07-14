@@ -4,3 +4,11 @@ State transitions are domain commands. Each command checks tenant, actor permiss
 
 Implemented transition maps live in `internal/state`. Unsupported transitions return `invalid_transition`; callers never write status strings directly.
 
+Phase F adds:
+
+- Lead: `discovered -> enriched -> qualified -> proof_requested -> proof_ready -> approved_for_outreach -> contacted -> replied -> meeting -> proposal -> won`, with controlled lost and suppression exits.
+- ProofRequest: `requested -> processing -> review -> ready`, with rejected, expired, and deleted exits.
+- Campaign: `draft -> pending_approval -> approved -> active -> paused/completed`, with rejection and cancellation exits. Approval is stored against the post-review version and activation checks that exact version.
+- OutreachMessage: `planned -> sent -> delivered/replied/bounced/complained` plus cancellation. The public phase F API exposes cancellation only; trusted adapter delivery remains feature-gated.
+- Deal: `open -> proposal -> won`, with lost and cancellation exits. Proposal and won are gated by canonical Quote state.
+- Experiment: `draft -> running -> completed`, with cancellation exits and a required result on completion.

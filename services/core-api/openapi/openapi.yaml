@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpportunityOS Core API
-  version: 0.5.0
+  version: 0.6.0
 servers:
   - url: http://127.0.0.1:8080
 paths:
@@ -458,6 +458,166 @@ paths:
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       responses:
         "201": { description: Operational charges, costs, and commissions compared with accounting facts }
+  /v1/growth:
+    get:
+      operationId: listGrowth
+      responses:
+        "200":
+          description: Tenant growth control-plane overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GrowthOverview" }
+  /v1/market-segments:
+    post:
+      operationId: createMarketSegment
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Product-agnostic market segment created }
+  /v1/market-segments/{id}/icps:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createICPDefinition
+      responses:
+        "201": { description: Schema-driven ICP definition created }
+  /v1/leads:
+    post:
+      operationId: createLead
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Lead created independently from Customer }
+  /v1/leads/{id}/evidence:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: addLeadEvidence
+      responses:
+        "201": { description: Tenant-scoped lead evidence added }
+  /v1/leads/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionLead
+      responses:
+        "200": { description: Lead transitioned by domain command }
+  /v1/leads/{id}/contacts:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createContact
+      responses:
+        "201": { description: Consent-aware contact and provenance created }
+  /v1/proof-templates:
+    post:
+      operationId: createProofTemplate
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Schema and workflow driven Proof template created }
+  /v1/leads/{id}/proof-requests:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createProofRequest
+      responses:
+        "201": { description: Expiring and access-controlled Proof request created }
+  /v1/proof-requests/{id}/generate:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: recordGeneratedProof
+      responses:
+        "201": { description: Trusted workflow result stored for review }
+  /v1/proof-requests/{id}/reviews:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: reviewProof
+      responses:
+        "200": { description: Proof reviewed by a separately authorized actor }
+  /v1/campaigns:
+    post:
+      operationId: createCampaign
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Campaign draft created }
+  /v1/campaigns/{id}/steps:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: addCampaignStep
+      responses:
+        "201": { description: Controlled campaign step added }
+  /v1/campaigns/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionCampaign
+      responses:
+        "200": { description: Campaign transitioned with approval gate }
+  /v1/campaigns/{id}/reviews:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: reviewCampaign
+      responses:
+        "200": { description: Campaign version reviewed by an approver }
+  /v1/suppressions:
+    post:
+      operationId: createSuppression
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Do-not-contact, opt-out, bounce, or complaint suppression created }
+  /v1/campaigns/{id}/outreach:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: planOutreach
+      responses:
+        "201": { description: Outreach planned or blocked after suppression and quota checks; no delivery occurs }
+  /v1/outreach/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: cancelPlannedOutreach
+      responses:
+        "200": { description: Planned outreach cancelled and reserved quota released }
+        "423": { description: External delivery transitions are feature-gated }
+  /v1/conversations:
+    post:
+      operationId: createConversation
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Lead or Deal conversation created }
+  /v1/conversations/{id}/messages:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: addConversationMessage
+      responses:
+        "201": { description: Inbound or unsent outbound conversation record created }
+  /v1/deals:
+    post:
+      operationId: createDeal
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Deal created independently from Order }
+  /v1/deals/{id}:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }]
+    get:
+      operationId: getDeal
+      responses:
+        "200": { description: Tenant-scoped canonical Deal }
+  /v1/deals/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionDeal
+      responses:
+        "200": { description: Deal transitioned with canonical Quote gate }
+  /v1/deals/{id}/quotes:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: createDealQuote
+      responses:
+        "201": { description: Existing transaction Quote created and bound to canonical Deal }
+  /v1/experiments:
+    post:
+      operationId: createGrowthExperiment
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Growth experiment draft created }
+  /v1/experiments/{id}/transitions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: transitionGrowthExperiment
+      responses:
+        "200": { description: Experiment started, completed with results, or cancelled }
   /v1/audit:
     get:
       operationId: listAudit
@@ -545,6 +705,7 @@ components:
         id: { type: string, format: uuid }
         tenant_id: { type: string, format: uuid }
         deal_id: { type: string }
+        growth_deal_id: { type: string, format: uuid }
         customer_id: { type: string }
         status: { type: string, enum: [draft, sent, accepted, rejected, expired, cancelled] }
         version: { type: integer, minimum: 1 }
@@ -553,6 +714,49 @@ components:
           items:
             type: object
             additionalProperties: true
+    GrowthOverview:
+      type: object
+      required: [segments, icps, leads, evidence, contacts, proof_templates, proof_requests, proof_instances, campaigns, suppressions, outreach, conversations, deals, experiments]
+      properties:
+        segments: { type: array, items: { type: object, additionalProperties: true } }
+        icps: { type: array, items: { type: object, additionalProperties: true } }
+        leads: { type: array, items: { $ref: "#/components/schemas/Lead" } }
+        evidence: { type: array, items: { type: object, additionalProperties: true } }
+        contacts: { type: array, items: { type: object, additionalProperties: true } }
+        proof_templates: { type: array, items: { type: object, additionalProperties: true } }
+        proof_requests: { type: array, items: { type: object, additionalProperties: true } }
+        proof_instances: { type: array, items: { type: object, additionalProperties: true } }
+        campaigns: { type: array, items: { type: object, additionalProperties: true } }
+        suppressions: { type: array, items: { type: object, additionalProperties: true } }
+        outreach: { type: array, items: { type: object, additionalProperties: true } }
+        conversations: { type: array, items: { type: object, additionalProperties: true } }
+        deals: { type: array, items: { $ref: "#/components/schemas/Deal" } }
+        experiments: { type: array, items: { type: object, additionalProperties: true } }
+    Lead:
+      type: object
+      required: [id, tenant_id, market_segment_id, name, status, score, version]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        market_segment_id: { type: string, format: uuid }
+        icp_definition_id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [discovered, enriched, qualified, proof_requested, proof_ready, approved_for_outreach, contacted, replied, meeting, proposal, won, lost, suppressed] }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        version: { type: integer, minimum: 1 }
+    Deal:
+      type: object
+      required: [id, tenant_id, lead_id, name, customer_id, status, value_minor, currency, version]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        lead_id: { type: string, format: uuid }
+        name: { type: string }
+        customer_id: { type: string }
+        status: { type: string, enum: [open, proposal, won, lost, cancelled] }
+        value_minor: { type: integer, minimum: 0 }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        version: { type: integer, minimum: 1 }
     ExecutionTransitionInput:
       type: object
       required: [to]

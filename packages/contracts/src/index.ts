@@ -96,7 +96,7 @@ export const QuoteVersionSchema = z.object({
   created_by: z.string(), created_at: z.string().datetime(), items: z.array(QuoteItemSchema).default([])
 });
 export const QuoteSchema = z.object({
-  id: z.string(), tenant_id: z.string(), deal_id: z.string(), customer_id: z.string(), status: z.string(),
+  id: z.string(), tenant_id: z.string(), deal_id: z.string(), growth_deal_id: z.string().optional(), customer_id: z.string(), status: z.string(),
   version: z.number().int().positive(), created_by: z.string(), created_at: z.string().datetime(),
   updated_at: z.string().datetime(), versions: z.array(QuoteVersionSchema).default([])
 });
@@ -215,6 +215,95 @@ export const OrderSchema = z.object({
   customer_charges: z.array(CustomerChargeSchema).default([])
 });
 
+export const MarketSegmentSchema = z.object({
+  id: z.string(), tenant_id: z.string(), name: z.string(), status: z.string(),
+  definition: z.record(z.string(), z.unknown()), version: z.number().int().positive(), created_by: z.string(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const ICPDefinitionSchema = z.object({
+  id: z.string(), tenant_id: z.string(), market_segment_id: z.string(), name: z.string(), status: z.string(),
+  definition: z.record(z.string(), z.unknown()), version: z.number().int().positive(), created_by: z.string(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const LeadSchema = z.object({
+  id: z.string(), tenant_id: z.string(), market_segment_id: z.string(), icp_definition_id: z.string().optional(), name: z.string(),
+  status: z.enum(["discovered", "enriched", "qualified", "proof_requested", "proof_ready", "approved_for_outreach", "contacted", "replied", "meeting", "proposal", "won", "lost", "suppressed"]),
+  score: z.number().int().min(0).max(100), version: z.number().int().positive(), evidence: z.array(z.string()).optional(),
+  created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const LeadEvidenceSchema = z.object({
+  id: z.string(), tenant_id: z.string(), lead_id: z.string(), kind: z.string(), summary: z.string(),
+  confidence: z.number().int().min(0).max(100), source_ref: z.string(), created_by: z.string(), created_at: z.string().datetime()
+});
+export const ContactSchema = z.object({
+  id: z.string(), tenant_id: z.string(), lead_id: z.string(), channel: z.string(), value: z.string(), normalized_value: z.string(),
+  status: z.string(), consent_status: z.string(), created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const ProofTemplateSchema = z.object({
+  id: z.string(), tenant_id: z.string(), name: z.string(), proof_type: z.enum(["report", "sample", "comparison", "prototype", "analysis", "audit", "simulation", "document", "media", "custom"]),
+  workflow_version_id: z.string(), input_schema: z.record(z.string(), z.unknown()), output_schema: z.record(z.string(), z.unknown()),
+  access_policy: z.record(z.string(), z.unknown()), retention_days: z.number().int().positive(), status: z.string(), version: z.number().int().positive(),
+  created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const ProofRequestSchema = z.object({
+  id: z.string(), tenant_id: z.string(), lead_id: z.string(), deal_id: z.string().optional(), template_id: z.string(), status: z.string(),
+  input: z.record(z.string(), z.unknown()), requested_by: z.string(), expires_at: z.string().datetime(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const ProofInstanceSchema = z.object({
+  id: z.string(), tenant_id: z.string(), proof_request_id: z.string(), status: z.string(), result: z.record(z.string(), z.unknown()),
+  artifact_ref: z.string(), review_rationale: z.string(), generated_by: z.string(), reviewed_by: z.string().optional(),
+  created_at: z.string().datetime(), reviewed_at: z.string().datetime().optional(), expires_at: z.string().datetime()
+});
+export const CampaignStepSchema = z.object({
+  id: z.string(), tenant_id: z.string(), campaign_id: z.string(), position: z.number().int().positive(), kind: z.string(),
+  definition: z.record(z.string(), z.unknown()), created_at: z.string().datetime()
+});
+export const CampaignApprovalSchema = z.object({
+  id: z.string(), tenant_id: z.string(), campaign_id: z.string(), campaign_version: z.number().int().positive(),
+  decision: z.enum(["approved", "rejected"]), rationale: z.string(), reviewed_by: z.string(), created_at: z.string().datetime()
+});
+export const CampaignSchema = z.object({
+  id: z.string(), tenant_id: z.string(), market_segment_id: z.string().optional(), name: z.string(), channel: z.string(), purpose: z.string(),
+  status: z.string(), version: z.number().int().positive(), created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  steps: z.array(CampaignStepSchema).default([]), approval: CampaignApprovalSchema.optional()
+});
+export const SuppressionEntrySchema = z.object({
+  id: z.string(), tenant_id: z.string(), subject_type: z.string(), subject_id: z.string(), channel: z.string(), reason: z.string(), status: z.string(),
+  source_ref: z.string(), created_by: z.string(), created_at: z.string().datetime(), released_at: z.string().datetime().optional()
+});
+export const OutreachMessageSchema = z.object({
+  id: z.string(), tenant_id: z.string(), campaign_id: z.string(), campaign_step_id: z.string(), lead_id: z.string(), contact_id: z.string().optional(),
+  status: z.enum(["planned", "blocked", "sent", "delivered", "replied", "bounced", "complained", "cancelled"]),
+  content: z.record(z.string(), z.unknown()), block_reason: z.string().optional(), external_message_id: z.string().optional(),
+  idempotency_key: z.string(), created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const ConversationMessageSchema = z.object({
+  id: z.string(), tenant_id: z.string(), conversation_id: z.string(), direction: z.enum(["inbound", "outbound", "system"]),
+  status: z.string(), content: z.record(z.string(), z.unknown()), idempotency_key: z.string(), created_by: z.string(), created_at: z.string().datetime()
+});
+export const ConversationSchema = z.object({
+  id: z.string(), tenant_id: z.string(), lead_id: z.string(), deal_id: z.string().optional(), channel: z.string(), status: z.string(),
+  created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime(), last_message_at: z.string().datetime().optional(),
+  messages: z.array(ConversationMessageSchema).default([])
+});
+export const DealSchema = z.object({
+  id: z.string(), tenant_id: z.string(), lead_id: z.string(), name: z.string(), customer_id: z.string(),
+  status: z.enum(["open", "proposal", "won", "lost", "cancelled"]), value_minor: z.number().int().nonnegative(), currency: z.string().length(3),
+  version: z.number().int().positive(), created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime(), closed_at: z.string().datetime().optional()
+});
+export const ExperimentSchema = z.object({
+  id: z.string(), tenant_id: z.string(), name: z.string(), entity_type: z.enum(["market_segment", "lead", "proof", "campaign", "deal"]), entity_id: z.string(),
+  hypothesis: z.string(), status: z.enum(["draft", "running", "completed", "cancelled"]), allocation_basis_points: z.number().int().min(0).max(10000),
+  metrics_definition: z.record(z.string(), z.unknown()), result: z.record(z.string(), z.unknown()), version: z.number().int().positive(),
+  created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const GrowthOverviewSchema = z.object({
+  segments: z.array(MarketSegmentSchema), icps: z.array(ICPDefinitionSchema), leads: z.array(LeadSchema), evidence: z.array(LeadEvidenceSchema),
+  contacts: z.array(ContactSchema), proof_templates: z.array(ProofTemplateSchema), proof_requests: z.array(ProofRequestSchema), proof_instances: z.array(ProofInstanceSchema),
+  campaigns: z.array(CampaignSchema), suppressions: z.array(SuppressionEntrySchema), outreach: z.array(OutreachMessageSchema),
+  conversations: z.array(ConversationSchema), deals: z.array(DealSchema), experiments: z.array(ExperimentSchema)
+});
+
 export type Money = z.infer<typeof MoneySchema>;
 export type Evidence = z.infer<typeof EvidenceSchema>;
 export type Opportunity = z.infer<typeof OpportunitySchema>;
@@ -256,6 +345,24 @@ export type ReconciliationItem = z.infer<typeof ReconciliationItemSchema>;
 export type ReconciliationRun = z.infer<typeof ReconciliationRunSchema>;
 export type FinanceOverview = z.infer<typeof FinanceOverviewSchema>;
 export type Order = z.infer<typeof OrderSchema>;
+export type MarketSegment = z.infer<typeof MarketSegmentSchema>;
+export type ICPDefinition = z.infer<typeof ICPDefinitionSchema>;
+export type Lead = z.infer<typeof LeadSchema>;
+export type LeadEvidence = z.infer<typeof LeadEvidenceSchema>;
+export type Contact = z.infer<typeof ContactSchema>;
+export type ProofTemplate = z.infer<typeof ProofTemplateSchema>;
+export type ProofRequest = z.infer<typeof ProofRequestSchema>;
+export type ProofInstance = z.infer<typeof ProofInstanceSchema>;
+export type CampaignStep = z.infer<typeof CampaignStepSchema>;
+export type CampaignApproval = z.infer<typeof CampaignApprovalSchema>;
+export type Campaign = z.infer<typeof CampaignSchema>;
+export type SuppressionEntry = z.infer<typeof SuppressionEntrySchema>;
+export type OutreachMessage = z.infer<typeof OutreachMessageSchema>;
+export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
+export type Conversation = z.infer<typeof ConversationSchema>;
+export type Deal = z.infer<typeof DealSchema>;
+export type Experiment = z.infer<typeof ExperimentSchema>;
+export type GrowthOverview = z.infer<typeof GrowthOverviewSchema>;
 
 export type Collection<T> = { items: T[] };
 

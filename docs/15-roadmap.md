@@ -26,11 +26,16 @@
 - [x] Reconcile CustomerCharge, ProviderCost, and Commission facts against accounting entries with stored discrepancies.
 - [x] Gate order payment and execution settlement on financial prerequisites.
 - [x] Connect operator finance operations and admin finance governance to authenticated APIs.
+- [x] Persist MarketSegment, ICPDefinition, Lead, LeadEvidence, Contact provenance, generic Proof, Campaign approval, suppression, quota, outreach planning, Conversation, Deal, and Experiment under tenant RLS.
+- [x] Bind canonical Growth Deal to the existing transaction Quote without creating duplicate Customer, Quote, Order, or ledger facts.
+- [x] Separate growth operators from Proof/Campaign approvers and keep outbound delivery feature-gated.
+- [x] Connect the operator growth-sales workspace and admin governance view to authenticated APIs and shared Zod contracts.
+- [x] Verify the phase F PostgreSQL chain, idempotency, cross-tenant isolation, audit, Outbox, suppression blocking, and quota release.
 
 ## First-release scope retained
 
-The remaining parts of phases C-H remain in scope: supplier contracts and quality, growth, reseller/supplier/marketplace workflows, and production end-to-end hardening.
+The remaining parts of phases C-H remain in scope: supplier contracts and quality, reseller/supplier/developer marketplace workflows, outcome feedback, and production end-to-end hardening.
 
 ## Next development task
 
-Implement phase F on the authenticated/RLS-aware repository boundary: MarketSegment, ICPDefinition, Lead, LeadEvidence, ProofTemplate, ProofRequest, ProofInstance, Campaign, Conversation, Deal, and Experiment. Keep Proof product-agnostic, preserve suppression and approval controls, and connect Deal to the canonical Quote without introducing a duplicate order source of truth.
+Implement phase G on the authenticated/RLS-aware repository boundary: Reseller, LeadOwnership, CustomerOwnership, attribution and protection periods, Supplier settlement/quality, Developer, Listing, Review, SandboxRun, Dispute, and Takedown. Reuse canonical Customer, Provider, payable, settlement, product, workflow, and ledger facts instead of creating parallel sources of truth.

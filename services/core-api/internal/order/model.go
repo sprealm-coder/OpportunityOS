@@ -24,16 +24,17 @@ func (b VersionBindings) Validate() error {
 }
 
 type Quote struct {
-	ID         string         `json:"id"`
-	TenantID   string         `json:"tenant_id"`
-	DealID     string         `json:"deal_id"`
-	CustomerID string         `json:"customer_id"`
-	Status     string         `json:"status"`
-	Version    int            `json:"version"`
-	CreatedBy  string         `json:"created_by"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-	Versions   []QuoteVersion `json:"versions"`
+	ID              string         `json:"id"`
+	TenantID        string         `json:"tenant_id"`
+	DealID          string         `json:"deal_id"`
+	CanonicalDealID string         `json:"growth_deal_id,omitempty"`
+	CustomerID      string         `json:"customer_id"`
+	Status          string         `json:"status"`
+	Version         int            `json:"version"`
+	CreatedBy       string         `json:"created_by"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	Versions        []QuoteVersion `json:"versions"`
 }
 
 type QuoteVersion struct {

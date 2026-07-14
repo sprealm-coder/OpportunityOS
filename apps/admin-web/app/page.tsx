@@ -1,12 +1,12 @@
 "use client";
 
-import { CoreApiClient, type AuditRecord, type Collection, type FinanceOverview, type Session } from "@opportunity-os/contracts";
+import { CoreApiClient, type AuditRecord, type Collection, type FinanceOverview, type GrowthOverview, type Session } from "@opportunity-os/contracts";
 import { LoginScreen, Metric, PortalShell, StatusBadge } from "@opportunity-os/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const api = new CoreApiClient(process.env.NEXT_PUBLIC_CORE_API_URL ?? "http://127.0.0.1:8080");
 
-const nav = ["系统首页", "租户与品牌", "角色与权限", "功能开关", "审计日志", "财务治理", "对象 Schema", "发布策略"].map(label => ({ label, href: "#audit" }));
+const nav = ["系统首页", "租户与品牌", "角色与权限", "功能开关", "审计日志", "增长治理", "财务治理", "对象 Schema", "发布策略"].map(label => ({ label, href: "#audit" }));
 const objects = [
   ["Opportunity", "8 状态", "PostgreSQL + Outbox"],
   ["IncubationProject", "8 状态", "事务阶段门"],
@@ -15,10 +15,13 @@ const objects = [
   ["Wallet / Hold", "资金状态", "可用与冻结分离"],
   ["LedgerTransaction", "只追加", "借贷平衡 + 快照"],
   ["ProviderPayable", "应付结算", "成本事实独立"],
-  ["ReconciliationRun", "匹配 / 差异", "运营与账本对照"]
+  ["ReconciliationRun", "匹配 / 差异", "运营与账本对照"],
+	["Lead / Deal", "增长漏斗", "Lead ≠ Customer · Deal ≠ Order"],
+	["Campaign / Suppression", "审批与阻止", "版本审批 + 配额预留"]
 ];
 
 const emptyFinance: FinanceOverview = { wallets: [], accounts: [], transactions: [], holds: [], refunds: [], commissions: [], provider_payables: [], settlements: [], reconciliation_runs: [] };
+const emptyGrowth: GrowthOverview = { segments: [], icps: [], leads: [], evidence: [], contacts: [], proof_templates: [], proof_requests: [], proof_instances: [], campaigns: [], suppressions: [], outreach: [], conversations: [], deals: [], experiments: [] };
 
 export default function Page() {
 	const [session, setSession] = useState<Session | null>(null);
@@ -27,12 +30,14 @@ export default function Page() {
 	const [authError, setAuthError] = useState<string | null>(null);
   const [audit, setAudit] = useState<AuditRecord[]>([]);
 	const [finance, setFinance] = useState<FinanceOverview>(emptyFinance);
+	const [growth, setGrowth] = useState<GrowthOverview>(emptyGrowth);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(async () => {
-		const [auditResult, financeResult] = await Promise.all([api.get<Collection<AuditRecord>>("/v1/audit"), api.get<FinanceOverview>("/v1/finance")]);
+		const [auditResult, financeResult, growthResult] = await Promise.all([api.get<Collection<AuditRecord>>("/v1/audit"), api.get<FinanceOverview>("/v1/finance"), api.get<GrowthOverview>("/v1/growth")]);
 		setAudit(auditResult.items);
 		setFinance(financeResult);
+		setGrowth(growthResult);
   }, []);
 
   useEffect(() => {
@@ -62,6 +67,7 @@ export default function Page() {
 		setSession(null);
 		setAudit([]);
 		setFinance(emptyFinance);
+		setGrowth(emptyGrowth);
 	}
 
   const actors = useMemo(() => new Set(audit.map(item => item.actor_id)).size, [audit]);
@@ -76,12 +82,23 @@ export default function Page() {
       <Metric label="活跃操作者" value={String(actors)} detail="来自持久化 Actor ID" />
       <Metric label="涉及对象" value={String(objectsTouched)} detail="按类型与对象 ID 去重" />
 			<Metric label="账本交易" value={String(finance.transactions.length)} detail={`${finance.wallets.length} 个钱包 · ${finance.reconciliation_runs.filter(item => item.status === "discrepancy").length} 次差异`} />
+			<Metric label="增长治理" value={String(growth.campaigns.filter(item => item.status === "pending_approval").length)} detail={`${growth.suppressions.length} 条抑制 · ${growth.outreach.filter(item => item.status === "blocked").length} 次阻止`} />
     </div>
 
     <section className="panel">
       <div className="panel-title"><h2>核心对象注册表</h2><StatusBadge>PostgreSQL 运行时</StatusBadge></div>
       <div style={{ overflowX: "auto" }}><table className="data-grid"><thead><tr><th>对象</th><th>生命周期</th><th>持久化契约</th><th>状态</th></tr></thead><tbody>{objects.map(row => <tr key={row[0]}><td><strong>{row[0]}</strong></td><td>{row[1]}</td><td>{row[2]}</td><td><StatusBadge>已注册</StatusBadge></td></tr>)}</tbody></table></div>
     </section>
+
+		<section className="panel">
+			<div className="panel-title"><h2>增长安全边界</h2><StatusBadge tone={growth.outreach.some(item => item.status === "blocked") ? "amber" : "green"}>外部发送关闭</StatusBadge></div>
+			<div style={{ overflowX: "auto" }}><table className="data-grid"><thead><tr><th>治理对象</th><th>总量</th><th>待处理</th><th>控制</th></tr></thead><tbody>
+				<tr><td><strong>Campaign</strong></td><td>{growth.campaigns.length}</td><td>{growth.campaigns.filter(item => item.status === "pending_approval").length}</td><td>版本化人工审批</td></tr>
+				<tr><td><strong>Proof</strong></td><td>{growth.proof_requests.length}</td><td>{growth.proof_requests.filter(item => item.status === "review").length}</td><td>Schema、访问策略与到期</td></tr>
+				<tr><td><strong>触达计划</strong></td><td>{growth.outreach.length}</td><td>{growth.outreach.filter(item => item.status === "blocked").length}</td><td>抑制优先于配额预留</td></tr>
+				<tr><td><strong>Deal</strong></td><td>{growth.deals.length}</td><td>{growth.deals.filter(item => ["open", "proposal"].includes(item.status)).length}</td><td>规范 Quote 外键</td></tr>
+			</tbody></table></div>
+		</section>
 
     <section className="panel" id="audit">
       <div className="panel-title"><h2>租户审计日志</h2><button className="button" onClick={() => load().catch(error => setError(error instanceof Error ? error.message : "刷新失败"))}>刷新</button></div>
