@@ -13,6 +13,7 @@ import (
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/application"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/auth"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/finance"
+	"github.com/opportunity-os/opportunity-os/services/core-api/internal/operations"
 	orderdomain "github.com/opportunity-os/opportunity-os/services/core-api/internal/order"
 	"github.com/opportunity-os/opportunity-os/services/core-api/internal/tenancy"
 )
@@ -115,8 +116,9 @@ func TestAPIRequiresTenantAndIdempotency(t *testing.T) {
 }
 
 func TestAPICORSAllowsWorkspacePortalsOnly(t *testing.T) {
+	t.Setenv("CORS_ALLOWED_ORIGINS", "https://admin.opportunity.test,http://127.0.0.1:3010")
 	server := New()
-	for _, origin := range []string{"http://127.0.0.1:3003", "http://127.0.0.1:3004", "http://127.0.0.1:3005"} {
+	for _, origin := range []string{"http://127.0.0.1:3003", "http://127.0.0.1:3004", "http://127.0.0.1:3005", "https://admin.opportunity.test", "http://127.0.0.1:3010"} {
 		request := httptest.NewRequest(http.MethodOptions, "/v1/channels", nil)
 		request.Header.Set("Origin", origin)
 		response := httptest.NewRecorder()
@@ -274,6 +276,47 @@ func TestAPITransactionRoutes(t *testing.T) {
 	server.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !bytes.Contains(response.Body.Bytes(), []byte("order-api")) {
 		t.Fatalf("list orders status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+type integrationAPIStore struct {
+	application.Store
+	application.IntegrationStore
+	received application.AdapterIngressRequest
+}
+
+func (s *integrationAPIStore) IngestAdapterResult(_ context.Context, request application.AdapterIngressRequest) (operations.AdapterReceipt, error) {
+	s.received = request
+	now := time.Now().UTC()
+	return operations.AdapterReceipt{ID: "receipt-api", TenantID: "tenant-api", AdapterIdentityID: "adapter-api", ExecutionOrderID: "execution-api", WorkflowStepID: "step-api", ExternalEventID: "event-api", Nonce: request.Nonce, ResultStatus: "succeeded", Payload: map[string]any{"ok": true}, ReceivedAt: now, ProcessedAt: &now}, nil
+}
+
+func TestAPIAdapterIngressAndExecutionBoundary(t *testing.T) {
+	store := &integrationAPIStore{Store: application.NewMemoryStore()}
+	server := newHandler(store, true)
+	body := []byte(`{"external_event_id":"event-api","execution_id":"execution-api","status":"succeeded"}`)
+	request := httptest.NewRequest(http.MethodPost, "/v1/adapter-results", bytes.NewReader(body))
+	request.Header.Set("X-Adapter-Key", "adapter-key")
+	request.Header.Set("X-Adapter-Timestamp", "123")
+	request.Header.Set("X-Adapter-Nonce", "nonce-api")
+	request.Header.Set("X-Adapter-Signature", "signature-api")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated || store.received.KeyID != "adapter-key" || store.received.Nonce != "nonce-api" || !bytes.Equal(store.received.Body, body) {
+		t.Fatalf("adapter ingress status=%d received=%#v body=%s", response.Code, store.received, response.Body.String())
+	}
+
+	transactionStore := &transactionAPIStore{Store: application.NewMemoryStore()}
+	server = newHandler(transactionStore, true)
+	request = httptest.NewRequest(http.MethodPost, "/v1/executions/execution-api/transitions", bytes.NewBufferString(`{"to":"succeeded","output":{"forged":true}}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Tenant-ID", "tenant-api-flow")
+	request.Header.Set("X-Actor-ID", "actor-api-flow")
+	request.Header.Set("Idempotency-Key", "forged-execution-result")
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || !bytes.Contains(response.Body.Bytes(), []byte("trusted_adapter_required")) {
+		t.Fatalf("browser supplied execution result status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 

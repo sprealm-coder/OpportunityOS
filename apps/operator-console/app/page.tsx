@@ -2,11 +2,13 @@
 
 import {
   CoreApiClient,
+	type AnalyticsOverview,
   type Blueprint,
 	type Capability,
   type Collection,
 	type FinanceOverview,
 	type GrowthOverview,
+	type IntelligenceOverview,
   type Incubation,
   type Opportunity,
 	type Product,
@@ -14,6 +16,7 @@ import {
 	type Provider,
 	type Quote,
 	type Order,
+	type OperationsOverview,
 	type Session
 } from "@opportunity-os/contracts";
 import { LoginScreen, Metric, PortalShell, StatusBadge } from "@opportunity-os/ui";
@@ -30,8 +33,11 @@ const emptyGrowth: GrowthOverview = {
 	segments: [], icps: [], leads: [], evidence: [], contacts: [], proof_templates: [], proof_requests: [],
 	proof_instances: [], campaigns: [], suppressions: [], outreach: [], conversations: [], deals: [], experiments: []
 };
+const emptyIntelligence: IntelligenceOverview = { sources: [], signals: [] };
+const emptyAnalytics: AnalyticsOverview = { feedback: [], projections: [] };
+const emptyOperations: OperationsOverview = { outbox: { pending: 0, retry_scheduled: 0, dead_letter: 0, oldest_pending_age_seconds: 0 }, workflow_runs: [], adapter_identities: [], adapter_receipts: [], alerts: [], deployment_checks: [] };
 
-const nav = ["运行概览", "机会审核", "孵化项目", "业务蓝图", "产品发布", "增长销售", "交易执行", "财务对账"].map(label => ({ label, href: "#workspace" }));
+const nav = ["运行概览", "情报与联调", "机会审核", "孵化项目", "业务蓝图", "产品发布", "增长销售", "交易执行", "财务对账"].map(label => ({ label, href: "#workspace" }));
 const statusLabel: Record<string, string> = {
   detected: "待补充证据", enriched: "待评分", scored: "待送审", under_review: "审核中",
   approved: "已批准", incubating: "孵化中", rejected: "已拒绝", archived: "已归档",
@@ -72,16 +78,19 @@ export default function Page() {
 	const [orders, setOrders] = useState<Order[]>([]);
 	const [finance, setFinance] = useState<FinanceOverview>(emptyFinance);
 	const [growth, setGrowth] = useState<GrowthOverview>(emptyGrowth);
+	const [intelligence, setIntelligence] = useState<IntelligenceOverview>(emptyIntelligence);
+	const [analytics, setAnalytics] = useState<AnalyticsOverview>(emptyAnalytics);
+	const [operations, setOperations] = useState<OperationsOverview>(emptyOperations);
   const [selectedID, setSelectedID] = useState<string | null>(null);
 	const [selectedProductID, setSelectedProductID] = useState<string | null>(null);
 	const [selectedOrderID, setSelectedOrderID] = useState<string | null>(null);
-	const [view, setView] = useState<"opportunities" | "incubations" | "blueprints" | "products" | "growth" | "transactions" | "finance">("opportunities");
+	const [view, setView] = useState<"integration" | "opportunities" | "incubations" | "blueprints" | "products" | "growth" | "transactions" | "finance">("integration");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-		const [opportunityResult, incubationResult, blueprintResult, capabilityResult, providerResult, productResult, quoteResult, orderResult, financeResult, growthResult] = await Promise.all([
+		const [opportunityResult, incubationResult, blueprintResult, capabilityResult, providerResult, productResult, quoteResult, orderResult, financeResult, growthResult, intelligenceResult, analyticsResult, operationsResult] = await Promise.all([
       api.get<Collection<Opportunity>>("/v1/opportunities"),
       api.get<Collection<Incubation>>("/v1/incubations"),
 			api.get<Collection<Blueprint>>("/v1/blueprints"),
@@ -91,7 +100,10 @@ export default function Page() {
 			api.get<Collection<Quote>>("/v1/quotes"),
 			api.get<Collection<Order>>("/v1/orders"),
 			api.get<FinanceOverview>("/v1/finance"),
-			api.get<GrowthOverview>("/v1/growth")
+			api.get<GrowthOverview>("/v1/growth"),
+			api.get<IntelligenceOverview>("/v1/intelligence"),
+			api.get<AnalyticsOverview>("/v1/analytics/outcomes"),
+			api.get<OperationsOverview>("/v1/operations")
     ]);
 		const productDetails = await Promise.all(productResult.items.map(item => api.get<ProductDetail>(`/v1/products/${item.id}`)));
     setOpportunities(opportunityResult.items);
@@ -104,6 +116,9 @@ export default function Page() {
 		setOrders(orderResult.items);
 		setFinance(financeResult);
 		setGrowth(growthResult);
+		setIntelligence(intelligenceResult);
+		setAnalytics(analyticsResult);
+		setOperations(operationsResult);
     setSelectedID(current => current ?? opportunityResult.items[0]?.id ?? null);
 		setSelectedProductID(current => current && productDetails.some(item => item.id === current) ? current : productDetails[0]?.id ?? null);
 		setSelectedOrderID(current => current && orderResult.items.some(item => item.id === current) ? current : orderResult.items[0]?.id ?? null);
@@ -144,6 +159,9 @@ export default function Page() {
 		setOrders([]);
 		setFinance(emptyFinance);
 		setGrowth(emptyGrowth);
+		setIntelligence(emptyIntelligence);
+		setAnalytics(emptyAnalytics);
+		setOperations(emptyOperations);
 	}
 
   const selected = useMemo(() => opportunities.find(item => item.id === selectedID) ?? null, [opportunities, selectedID]);
@@ -296,10 +314,12 @@ export default function Page() {
       <Metric label="孵化项目" value={String(incubations.length)} detail="版本化阶段门" />
 			<Metric label="已发布产品" value={String(products.filter(item => item.status === "published").length)} detail={`${products.length} 个产品定义`} />
 			<Metric label="增长管道" value={String(growth.leads.length)} detail={`${growth.deals.filter(item => ["open", "proposal"].includes(item.status)).length} 个进行中 Deal`} />
+			<Metric label="运行队列" value={String(operations.workflow_runs.filter(item => ["running", "retry_wait"].includes(item.status)).length)} detail={`${operations.outbox.dead_letter} 条 Outbox 死信`} />
     </div>
 
     <section className="panel" id="workspace">
       <div className="tabs" role="tablist" aria-label="运营对象">
+				<button className={`tab ${view === "integration" ? "active" : ""}`} onClick={() => setView("integration")}>情报与联调</button>
         <button className={`tab ${view === "opportunities" ? "active" : ""}`} onClick={() => setView("opportunities")}>机会</button>
         <button className={`tab ${view === "incubations" ? "active" : ""}`} onClick={() => setView("incubations")}>孵化项目</button>
         <button className={`tab ${view === "blueprints" ? "active" : ""}`} onClick={() => setView("blueprints")}>业务蓝图</button>
@@ -308,7 +328,7 @@ export default function Page() {
 				<button className={`tab ${view === "transactions" ? "active" : ""}`} onClick={() => setView("transactions")}>交易执行</button>
 				<button className={`tab ${view === "finance" ? "active" : ""}`} onClick={() => setView("finance")}>财务</button>
       </div>
-      {loading ? <div className="loading">正在读取 Core API...</div> : view === "opportunities" ?
+      {loading ? <div className="loading">正在读取 Core API...</div> : view === "integration" ? <IntegrationWorkspace intelligence={intelligence} analytics={analytics} operations={operations} opportunities={opportunities} orders={orders} providers={providers} sessionRole={session.role} busy={busy} onCommand={(path, body) => execute(() => api.command(path, body))} /> : view === "opportunities" ?
         <OpportunityWorkspace opportunities={opportunities} selected={selected} selectedID={selectedID} busy={busy}
           onSelect={setSelectedID} onCreate={createOpportunity} onEvidence={addEvidence} onScore={scoreOpportunity}
           onTransition={to => selected && execute(() => api.command(`/v1/opportunities/${selected.id}/transitions`, { to }))}
@@ -392,8 +412,81 @@ function Command({ title, children }: { title: string; children: import("react")
 }
 
 function ObjectRecords({ items }: { items: { id: string; title: string; status: string; detail: string }[] }) {
-  if (!items.length) return <div className="empty-feature">暂无记录</div>;
-  return <div className="record-list">{items.map(item => <div className="record-row" key={item.id}><div><strong>{item.title}</strong><small>{item.detail}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge><span className="muted">{item.id.slice(0, 8)}</span></div>)}</div>;
+	if (!items.length) return <div className="empty-feature">暂无记录</div>;
+	return <div className="record-list">{items.map(item => <div className="record-row" key={item.id}><div><strong>{item.title}</strong><small>{item.detail}</small></div><StatusBadge tone={tone(item.status)}>{statusLabel[item.status] ?? item.status}</StatusBadge><span className="muted">{item.id.slice(0, 8)}</span></div>)}</div>;
+}
+
+type IntegrationWorkspaceProps = {
+	intelligence: IntelligenceOverview;
+	analytics: AnalyticsOverview;
+	operations: OperationsOverview;
+	opportunities: Opportunity[];
+	orders: Order[];
+	providers: Provider[];
+	sessionRole: string;
+	busy: boolean;
+	onCommand: (path: string, body: unknown) => Promise<unknown>;
+};
+
+function IntegrationWorkspace(props: IntegrationWorkspaceProps) {
+	const [formError, setFormError] = useState<string | null>(null);
+	const queuedExecutions = props.orders.flatMap(order => order.executions.filter(execution => execution.status === "queued").map(execution => ({ ...execution, customer: order.customer_id })));
+	const leasedExecutionIDs = new Set(props.operations.workflow_runs.map(run => run.execution_order_id));
+	const leaseableRuns = props.operations.workflow_runs.filter(run => run.steps.some(step => ["pending", "retry_wait"].includes(step.status)));
+	const completedOrders = props.orders.filter(order => order.status === "completed" && !props.analytics.feedback.some(item => item.order_id === order.id));
+	const endpoints = props.providers.flatMap(provider => provider.endpoints.filter(endpoint => endpoint.status === "healthy").map(endpoint => ({ id: endpoint.id, label: `${provider.name} · ${endpoint.adapter_type}` })));
+
+	function submit(event: FormEvent<HTMLFormElement>, path: string, build: (values: FormData) => unknown) {
+		event.preventDefault();
+		const form = event.currentTarget;
+		setFormError(null);
+		try {
+			void props.onCommand(path, build(new FormData(form))).then(() => form.reset()).catch(error => setFormError(errorMessage(error)));
+		} catch (error) {
+			setFormError(errorMessage(error));
+		}
+	}
+
+	return <div className="factory-layout">
+		{formError && <div className="notice error" role="alert">{formError}</div>}
+		<section className="factory-band">
+			<div className="panel-title"><h2>Source 与 Signal</h2><span className="muted">{props.intelligence.sources.length} 个来源 · {props.intelligence.signals.length} 条信号</span></div>
+			<div className="factory-columns">
+				<form className="form-grid" onSubmit={event => submit(event, "/v1/sources", values => ({ name: values.get("name"), connector_type: values.get("connector_type"), config: JSON.parse(String(values.get("config"))) }))}>
+					<label className="field"><span>来源名称</span><input name="name" required /></label>
+					<label className="field"><span>连接类型</span><select name="connector_type" defaultValue="manual"><option value="manual">人工</option><option value="webhook">Webhook</option><option value="json_import">JSON 导入</option><option value="adapter">Adapter</option></select></label>
+					<label className="field wide"><span>连接配置</span><textarea name="config" defaultValue="{}" required /></label>
+					<div className="form-actions wide"><button className="button primary" disabled={props.busy}>创建 Source</button></div>
+				</form>
+				<form className="form-grid" onSubmit={event => { const values = new FormData(event.currentTarget); const sourceID = String(values.get("source_id")); submit(event, `/v1/sources/${sourceID}/signals`, current => ({ external_id: current.get("external_id"), payload: JSON.parse(String(current.get("payload"))), normalized: JSON.parse(String(current.get("normalized"))), occurred_at: new Date().toISOString() })); }}>
+					<label className="field wide"><span>Source</span><select name="source_id" required defaultValue=""><option value="" disabled>选择来源</option>{props.intelligence.sources.filter(item => item.status === "active").map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+					<label className="field"><span>外部事件 ID</span><input name="external_id" required /></label>
+					<label className="field wide"><span>原始载荷</span><textarea name="payload" defaultValue={'{"summary":"Test Signal"}'} required /></label>
+					<label className="field wide"><span>标准化结果</span><textarea name="normalized" defaultValue="{}" required /></label>
+					<div className="form-actions wide"><button className="button primary" disabled={props.busy || !props.intelligence.sources.length}>导入 Signal</button></div>
+				</form>
+			</div>
+			<div className="transaction-rows">{props.intelligence.signals.map(signal => <div className="transaction-row" key={signal.id}><div><strong>{String(signal.normalized.entity ?? signal.payload.summary ?? signal.external_id ?? signal.id.slice(0, 8))}</strong><small>{props.intelligence.sources.find(source => source.id === signal.source_id)?.name ?? signal.source_id.slice(0, 8)} · {signal.fingerprint.slice(0, 12)}</small></div><StatusBadge tone={tone(signal.status)}>{statusLabel[signal.status] ?? signal.status}</StatusBadge>{signal.status !== "promoted" ? <form className="button-row" onSubmit={event => submit(event, `/v1/signals/${signal.id}/promotions`, values => ({ name: values.get("name"), description: values.get("description"), summary: values.get("summary"), confidence: Number(values.get("confidence")) }))}><input name="name" required placeholder="机会名称" /><input name="description" placeholder="机会描述" /><input name="summary" required placeholder="证据摘要" /><input name="confidence" type="number" min="0" max="100" defaultValue="80" required /><button className="button" disabled={props.busy}>晋升机会</button></form> : <span className="muted">Opportunity {signal.opportunity_id?.slice(0, 8)}</span>}</div>)}</div>
+		</section>
+
+		<section className="factory-band">
+			<div className="panel-title"><h2>工作流租约与 Adapter</h2><StatusBadge tone={props.operations.alerts.some(item => item.status !== "resolved") ? "amber" : "green"}>{props.operations.alerts.filter(item => item.status !== "resolved").length} 个活动告警</StatusBadge></div>
+			{props.sessionRole === "admin" && <form className="inline-form" onSubmit={event => submit(event, "/v1/adapter-identities", values => ({ name: values.get("name"), key_id: values.get("key_id"), provider_endpoint_id: values.get("provider_endpoint_id"), secret_ref: values.get("secret_ref") }))}><input name="name" required placeholder="Adapter 身份名称" /><input name="key_id" required placeholder="Key ID" /><select name="provider_endpoint_id" required defaultValue=""><option value="" disabled>Provider Endpoint</option>{endpoints.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select><input name="secret_ref" required pattern="OPPORTUNITY_ADAPTER_SECRET_.+" placeholder="OPPORTUNITY_ADAPTER_SECRET_..." /><button className="button" disabled={props.busy || !endpoints.length}>注册身份</button></form>}
+			<div className="transaction-rows">{queuedExecutions.map(execution => <div className="transaction-row" key={execution.id}><div><strong>{execution.customer}</strong><small>Execution {execution.id.slice(0, 8)} · {execution.bindings.workflow_version_id.slice(0, 8)}</small></div><StatusBadge tone="amber">{leasedExecutionIDs.has(execution.id) ? "等待租约" : "已排队"}</StatusBadge>{!leasedExecutionIDs.has(execution.id) ? <button className="button" disabled={props.busy} onClick={() => void props.onCommand(`/v1/executions/${execution.id}/workflow-runs`, { max_attempts: 3 })}>启动 WorkflowRun</button> : <span className="muted">持久化运行已创建</span>}</div>)}</div>
+			{leaseableRuns.length > 0 && <form className="inline-form" onSubmit={event => submit(event, "/v1/workflow-steps/leases", values => ({ adapter_identity_id: values.get("adapter_identity_id"), lease_seconds: Number(values.get("lease_seconds")) }))}><select name="adapter_identity_id" required defaultValue=""><option value="" disabled>Adapter 身份</option>{props.operations.adapter_identities.filter(item => item.status === "active").map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input name="lease_seconds" type="number" min="1" max="300" defaultValue="120" required /><button className="button primary" disabled={props.busy || !props.operations.adapter_identities.length}>领取下一步骤</button></form>}
+			<div style={{ overflowX: "auto" }}><table className="data-grid"><thead><tr><th>WorkflowRun</th><th>执行</th><th>状态</th><th>步骤 / 尝试</th><th>最近回执</th></tr></thead><tbody>{props.operations.workflow_runs.map(run => { const receipt = props.operations.adapter_receipts.find(item => item.execution_order_id === run.execution_order_id); return <tr key={run.id}><td><strong>{run.id.slice(0, 8)}</strong></td><td>{run.execution_order_id.slice(0, 8)}</td><td><StatusBadge tone={tone(run.status)}>{statusLabel[run.status] ?? run.status}</StatusBadge></td><td>{run.steps.map(step => `${step.node_id} ${step.attempt}/${step.max_attempts}`).join(", ")}</td><td>{receipt ? `${receipt.result_status} · ${new Date(receipt.received_at).toLocaleTimeString("zh-CN")}` : "-"}</td></tr>; })}</tbody></table></div>
+		</section>
+
+		<section className="factory-band">
+			<div className="panel-title"><h2>OutcomeFeedback</h2><span className="muted">{props.analytics.feedback.length} 条反馈 · {props.analytics.projections.length} 个机会投影</span></div>
+			<form className="inline-form" onSubmit={event => submit(event, "/v1/outcome-feedback", values => { const order = props.orders.find(item => item.id === values.get("order_id")); return { opportunity_id: values.get("opportunity_id"), order_id: values.get("order_id"), execution_order_id: order?.executions[0]?.id, metrics: { conversion: "won" }, evidence: { source: "operator_review" } }; })}>
+				<select name="opportunity_id" required defaultValue=""><option value="" disabled>Opportunity</option>{props.opportunities.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+				<select name="order_id" required defaultValue=""><option value="" disabled>已完成订单</option>{completedOrders.map(item => <option key={item.id} value={item.id}>{item.customer_id} · {item.currency} {item.amount_minor}</option>)}</select>
+				<button className="button primary" disabled={props.busy || !completedOrders.length}>记录结果反馈</button>
+			</form>
+			<div style={{ overflowX: "auto" }}><table className="data-grid"><thead><tr><th>Opportunity</th><th>反馈</th><th>收费</th><th>成本</th><th>毛利</th></tr></thead><tbody>{props.analytics.projections.map(item => <tr key={item.opportunity_id}><td><strong>{props.opportunities.find(opportunity => opportunity.id === item.opportunity_id)?.name ?? item.opportunity_id.slice(0, 8)}</strong></td><td>{item.feedback_count}</td><td>{String(item.latest_metrics.customer_charge_minor ?? "-")}</td><td>{String(item.latest_metrics.provider_cost_minor ?? "-")}</td><td>{String(item.latest_metrics.gross_margin_minor ?? "-")}</td></tr>)}</tbody></table></div>
+		</section>
+	</div>;
 }
 
 function BlueprintRecords({ items, busy, onAdvance }: { items: Blueprint[]; busy: boolean; onAdvance: (id: string, to: string) => void }) {
@@ -560,7 +653,7 @@ type TransactionWorkspaceProps = {
 function TransactionWorkspace(props: TransactionWorkspaceProps) {
 	const endpoints = props.providers.flatMap(provider => provider.endpoints.filter(endpoint => endpoint.status === "healthy").map(endpoint => ({ id: endpoint.id, label: `${provider.name} · ${endpoint.adapter_type}` })));
 	const orderNext: Record<string, string> = { created: "awaiting_payment", awaiting_payment: "paid", paid: "provisioning", provisioning: "active", active: "completed" };
-	const executionNext: Record<string, string> = { created: "validating", validating: "reserved", reserved: "queued", queued: "submitted", submitted: "processing", processing: "succeeded", succeeded: "reconciling", reconciling: "settled" };
+	const executionNext: Record<string, string> = { created: "validating", validating: "reserved", reserved: "queued", succeeded: "reconciling", failed: "reconciling", reconciling: "settled" };
 	const deliveryNext: Record<string, string> = { created: "in_progress", in_progress: "completed", waiting: "in_progress", failed: "in_progress" };
 	const selected = props.selected;
 	const selectedNext = selected ? orderNext[selected.status] : undefined;
@@ -608,7 +701,7 @@ function TransactionWorkspace(props: TransactionWorkspaceProps) {
 				const usageRecorded = selected.usage.some(item => item.execution_order_id === execution.id);
 				const costRecorded = selected.provider_costs.some(item => item.execution_order_id === execution.id);
 				const chargeRecorded = selected.customer_charges.some(item => item.execution_order_id === execution.id);
-				return <div className="execution-row" key={execution.id}><div className="execution-heading"><div><strong>{execution.id.slice(0, 8)}</strong><small>{execution.bindings.sku_version_id.slice(0, 8)} · attempt {execution.attempt}</small></div><StatusBadge tone={tone(execution.status)}>{statusLabel[execution.status] ?? execution.status}</StatusBadge>{next && <form className="button-row" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); props.onExecution(execution.id, next, String(values.get("provider_endpoint_id") ?? "")); }}>{next === "reserved" && <select name="provider_endpoint_id" required defaultValue=""><option value="" disabled>选择 Endpoint</option>{endpoints.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select>}<button className="button" disabled={props.busy || (next === "reserved" && !endpoints.length)}>推进至{statusLabel[next] ?? next}</button></form>}</div>
+				return <div className="execution-row" key={execution.id}><div className="execution-heading"><div><strong>{execution.id.slice(0, 8)}</strong><small>{execution.bindings.sku_version_id.slice(0, 8)} · attempt {execution.attempt}</small></div><StatusBadge tone={tone(execution.status)}>{statusLabel[execution.status] ?? execution.status}</StatusBadge>{next ? <form className="button-row" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); props.onExecution(execution.id, next, String(values.get("provider_endpoint_id") ?? "")); }}>{next === "reserved" && <select name="provider_endpoint_id" required defaultValue=""><option value="" disabled>选择 Endpoint</option>{endpoints.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select>}<button className="button" disabled={props.busy || (next === "reserved" && !endpoints.length)}>推进至{statusLabel[next] ?? next}</button></form> : ["queued", "submitted", "processing"].includes(execution.status) ? <span className="muted">等待可信 Adapter 回执</span> : null}</div>
 					{["succeeded", "reconciling", "settled"].includes(execution.status) && <div className="fact-actions">{!usageRecorded && <form className="inline-form" onSubmit={event => { event.preventDefault(); props.onUsage(execution.id, Number(new FormData(event.currentTarget).get("quantity"))); }}><label className="field"><span>用量</span><input name="quantity" type="number" min="0" defaultValue="1" required /></label><button className="button" disabled={props.busy}>记录用量</button></form>}{!costRecorded && <form className="inline-form" onSubmit={event => { event.preventDefault(); const values = new FormData(event.currentTarget); props.onCost(execution.id, String(values.get("provider_endpoint_id")), String(values.get("currency")), Number(values.get("amount_minor"))); }}><label className="field"><span>Endpoint</span><select name="provider_endpoint_id" required defaultValue={execution.provider_endpoint_id ?? ""}><option value="" disabled>选择 Endpoint</option>{endpoints.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><label className="field"><span>成本</span><input name="amount_minor" type="number" min="0" required /></label><label className="field"><span>币种</span><input name="currency" minLength={3} maxLength={3} defaultValue={selected.currency} required /></label><button className="button" disabled={props.busy || !endpoints.length}>记录成本</button></form>}{usageRecorded && !chargeRecorded && <button className="button primary" disabled={props.busy} onClick={() => props.onCharge(execution.id)}>计算客户收费</button>}{usageRecorded && costRecorded && chargeRecorded && <span className="muted">运营事实已齐备</span>}</div>}
 				</div>;
 			}) : <div className="empty-feature">订单进入履约后生成执行记录</div>}</div>

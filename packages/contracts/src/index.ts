@@ -436,6 +436,58 @@ export const ChannelOverviewSchema = z.object({
   provider_payables: z.array(ProviderPayableSchema), reseller_settlements: z.array(SettlementSchema), supplier_settlements: z.array(SettlementSchema), marketplace: MarketplaceOverviewSchema
 });
 
+export const SourceSchema = z.object({
+  id: z.string(), tenant_id: z.string(), name: z.string(), connector_type: z.string(), status: z.string(),
+  config: z.record(z.string(), z.unknown()), version: z.number().int().positive(), created_by: z.string(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const SignalSchema = z.object({
+  id: z.string(), tenant_id: z.string(), source_id: z.string(), opportunity_id: z.string().optional(), external_id: z.string().optional(),
+  fingerprint: z.string(), status: z.string(), payload: z.record(z.string(), z.unknown()), normalized: z.record(z.string(), z.unknown()),
+  occurred_at: z.string().datetime(), imported_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const IntelligenceOverviewSchema = z.object({ sources: z.array(SourceSchema), signals: z.array(SignalSchema) });
+
+export const OutcomeFeedbackSchema = z.object({
+  id: z.string(), tenant_id: z.string(), opportunity_id: z.string(), order_id: z.string(), execution_order_id: z.string().optional(),
+  status: z.string(), metrics: z.record(z.string(), z.unknown()), evidence: z.record(z.string(), z.unknown()), idempotency_key: z.string(),
+  version: z.number().int().positive(), created_by: z.string(), validated_at: z.string().datetime(), created_at: z.string().datetime()
+});
+export const OpportunityProjectionSchema = z.object({
+  opportunity_id: z.string(), feedback_count: z.number().int().nonnegative(), latest_metrics: z.record(z.string(), z.unknown()), updated_at: z.string().datetime().optional()
+});
+export const AnalyticsOverviewSchema = z.object({ feedback: z.array(OutcomeFeedbackSchema), projections: z.array(OpportunityProjectionSchema) });
+
+export const WorkflowStepSchema = z.object({
+  id: z.string(), tenant_id: z.string(), run_id: z.string(), execution_order_id: z.string(), node_id: z.string(), node_type: z.string(), status: z.string(),
+  attempt: z.number().int().nonnegative(), max_attempts: z.number().int().positive(), locked_by: z.string().optional(), locked_until: z.string().datetime().optional(),
+  next_retry_at: z.string().datetime().optional(), output: z.record(z.string(), z.unknown()), error: z.record(z.string(), z.unknown()),
+  started_at: z.string().datetime().optional(), completed_at: z.string().datetime().optional()
+});
+export const WorkflowRunSchema = z.object({
+  id: z.string(), tenant_id: z.string(), definition_id: z.string(), execution_order_id: z.string(), idempotency_key: z.string(), status: z.string(),
+  variables: z.record(z.string(), z.unknown()), created_by: z.string(), started_at: z.string().datetime().optional(), completed_at: z.string().datetime().optional(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime(), steps: z.array(WorkflowStepSchema)
+});
+export const AdapterIdentitySchema = z.object({
+  id: z.string(), tenant_id: z.string(), name: z.string(), key_id: z.string(), provider_endpoint_id: z.string(), secret_ref: z.string(), status: z.string(),
+  created_by: z.string(), created_at: z.string().datetime(), updated_at: z.string().datetime()
+});
+export const AdapterReceiptSchema = z.object({
+  id: z.string(), tenant_id: z.string(), adapter_identity_id: z.string(), execution_order_id: z.string(), workflow_step_id: z.string(),
+  external_event_id: z.string(), nonce: z.string(), result_status: z.string(), payload: z.record(z.string(), z.unknown()),
+  received_at: z.string().datetime(), processed_at: z.string().datetime().optional()
+});
+export const OperationalAlertSchema = z.object({
+  id: z.string(), tenant_id: z.string(), alert_type: z.string(), severity: z.string(), status: z.string(), object_type: z.string(), object_id: z.string(),
+  message: z.string(), details: z.record(z.string(), z.unknown()), created_at: z.string().datetime(), acknowledged_at: z.string().datetime().optional(), resolved_at: z.string().datetime().optional()
+});
+export const OperationsOverviewSchema = z.object({
+  outbox: z.object({ pending: z.number().int().nonnegative(), retry_scheduled: z.number().int().nonnegative(), dead_letter: z.number().int().nonnegative(), oldest_pending_at: z.string().datetime().optional(), last_published_at: z.string().datetime().optional(), oldest_pending_age_seconds: z.number().int() }),
+  workflow_runs: z.array(WorkflowRunSchema), adapter_identities: z.array(AdapterIdentitySchema), adapter_receipts: z.array(AdapterReceiptSchema),
+  alerts: z.array(OperationalAlertSchema), deployment_checks: z.array(z.object({ name: z.string(), status: z.string(), message: z.string() }))
+});
+
 export type Money = z.infer<typeof MoneySchema>;
 export type Evidence = z.infer<typeof EvidenceSchema>;
 export type Opportunity = z.infer<typeof OpportunitySchema>;
@@ -520,6 +572,18 @@ export type MarketplaceDispute = z.infer<typeof MarketplaceDisputeSchema>;
 export type Takedown = z.infer<typeof TakedownSchema>;
 export type MarketplaceOverview = z.infer<typeof MarketplaceOverviewSchema>;
 export type ChannelOverview = z.infer<typeof ChannelOverviewSchema>;
+export type Source = z.infer<typeof SourceSchema>;
+export type Signal = z.infer<typeof SignalSchema>;
+export type IntelligenceOverview = z.infer<typeof IntelligenceOverviewSchema>;
+export type OutcomeFeedback = z.infer<typeof OutcomeFeedbackSchema>;
+export type OpportunityProjection = z.infer<typeof OpportunityProjectionSchema>;
+export type AnalyticsOverview = z.infer<typeof AnalyticsOverviewSchema>;
+export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
+export type WorkflowRun = z.infer<typeof WorkflowRunSchema>;
+export type AdapterIdentity = z.infer<typeof AdapterIdentitySchema>;
+export type AdapterReceipt = z.infer<typeof AdapterReceiptSchema>;
+export type OperationalAlert = z.infer<typeof OperationalAlertSchema>;
+export type OperationsOverview = z.infer<typeof OperationsOverviewSchema>;
 
 export type Collection<T> = { items: T[] };
 

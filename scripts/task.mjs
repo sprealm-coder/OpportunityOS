@@ -88,7 +88,11 @@ const tasks = {
   e2e() {
     run("docker", ["compose", "up", "-d", "postgres"]);
     run("go", ["run", "./cmd/migrate", "up"], { cwd: join(root, "services/core-api") });
-    run("go", ["test", "./tests", "-run", "TestNeutralEndToEnd", "-v"], { cwd: join(root, "services/core-api") });
+		run("go", ["test", "./internal/postgres", "-run", "TestPhaseHNeutralPostgresEndToEnd", "-v"], { cwd: join(root, "services/core-api") });
+		run("go", ["test", "./tests", "-run", "TestNeutralEndToEnd", "-v"], { cwd: join(root, "services/core-api") });
+  },
+  productionCheck() {
+		run("go", ["run", "./cmd/production-check"], { cwd: join(root, "services/core-api") });
   },
   reset() {
     run("docker", ["compose", "down", "-v"]);

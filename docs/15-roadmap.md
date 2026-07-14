@@ -37,11 +37,18 @@
 - [x] Separate channel operators from ownership, supplier, marketplace, and takedown approvers with Store-level self-review guards.
 - [x] Connect authenticated reseller, supplier, and marketplace portals to Core API commands and shared Zod contracts.
 - [x] Verify the phase G PostgreSQL chain, idempotency, cross-tenant isolation, canonical finance reuse, release gates, audit, and Outbox.
+- [x] Persist product-neutral Source/Signal intake, fingerprint deduplication, and explicit Opportunity/Evidence lineage.
+- [x] Persist WorkflowRun side-effect steps with bounded Adapter leases, attempts, retry schedules, output, errors, and completion state.
+- [x] Replace browser-authored external execution results with Provider-bound, signed, timestamped, nonce-protected Adapter result ingress.
+- [x] Validate completed Order-to-Opportunity lineage and finance settlement before recording versioned OutcomeFeedback and projections.
+- [x] Add Outbox delivery health, dead-letter alerts, audited replay, deployment checks, secure production Cookie configuration, and CI.
+- [x] Connect operator intelligence/workflow/feedback operations and admin health/outcome governance to authenticated APIs and shared contracts.
+- [x] Run the real neutral PostgreSQL Source-to-OutcomeFeedback acceptance chain across phases A-G with RLS, idempotency, audit, Inbox, and Outbox assertions.
 
 ## First-release scope retained
 
-Phase H remains in scope: neutral end-to-end integration across phases A-G, outcome feedback, operational observability, and production hardening.
+Phases A-H of the first-release core chain are implemented and verified. External outreach delivery, external payment movement, marketplace payout, and arbitrary code execution remain disabled; those controls were retained rather than represented as complete integrations.
 
 ## Next development task
 
-Implement phase H across the authenticated/RLS-aware boundary: run one neutral Source-to-OutcomeFeedback acceptance chain through opportunity, blueprint, product, growth, channel, transaction, execution, finance, marketplace governance, and analytics. Add workflow leases, trusted Adapter result ingress, operational replay/alerts, and production deployment checks without enabling external outreach or marketplace payouts.
+Run the Phase H stabilization cycle for a production pilot: multi-node workflow dependency release and compensation recovery, Adapter key rotation/mTLS, supplier contract snapshots in route decisions, alert notification/SLA ownership, session rotation, customer portal completion, resolver-pinned crawler redirects, and backup/restore drills. Do not enable external outreach, payment movement, or marketplace payout until their independent approval and reconciliation gates are implemented.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: OpportunityOS Core API
-  version: 0.7.0
+  version: 0.8.0
 servers:
   - url: http://127.0.0.1:8080
 paths:
@@ -348,7 +348,8 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ExecutionTransitionInput" }
       responses:
-        "200": { description: Execution transitioned by the controlled state machine }
+        "200": { description: Administrative execution transition; external result states require signed Adapter ingress }
+        "403": { description: Trusted Adapter result state or output was supplied through a browser session }
         "409": { description: Invalid transition or provider readiness failed }
   /v1/deliveries/{id}/transitions:
     parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
@@ -777,6 +778,77 @@ paths:
     post:
       operationId: reviewTakedown
       responses: { "200": { description: Takedown independently reviewed and approved removal executed } }
+  /v1/intelligence:
+    get:
+      operationId: listIntelligence
+      responses: { "200": { description: Tenant Source and deduplicated Signal overview } }
+  /v1/sources:
+    post:
+      operationId: createSource
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Product-neutral Source created } }
+  /v1/sources/{id}/signals:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: importSignal
+      responses: { "201": { description: Signal imported or returned from fingerprint deduplication } }
+  /v1/signals/{id}/promotions:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: promoteSignal
+      responses: { "201": { description: Opportunity and evidence created with explicit Signal lineage } }
+  /v1/analytics/outcomes:
+    get:
+      operationId: listOutcomeAnalytics
+      responses: { "200": { description: Validated OutcomeFeedback and Opportunity projections } }
+  /v1/outcome-feedback:
+    post:
+      operationId: recordOutcomeFeedback
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { description: Settled and reconciled order outcome recorded }
+        "409": { description: Lineage, completion, settlement, or reconciliation prerequisite failed }
+  /v1/adapter-identities:
+    post:
+      operationId: registerAdapterIdentity
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Provider-bound Adapter key identity registered with an environment secret reference } }
+  /v1/executions/{id}/workflow-runs:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: startWorkflowRun
+      responses: { "201": { description: Persistent WorkflowRun and retryable side-effect steps created } }
+  /v1/workflow-steps/leases:
+    post:
+      operationId: leaseWorkflowStep
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "200": { description: Due step leased to a matching Adapter identity } }
+  /v1/adapter-results:
+    post:
+      operationId: ingestAdapterResult
+      security: []
+      parameters:
+        - { in: header, name: X-Adapter-Key, required: true, schema: { type: string } }
+        - { in: header, name: X-Adapter-Timestamp, required: true, schema: { type: string } }
+        - { in: header, name: X-Adapter-Nonce, required: true, schema: { type: string, minLength: 16 } }
+        - { in: header, name: X-Adapter-Signature, required: true, schema: { type: string } }
+      responses:
+        "201": { description: Signed result receipt persisted and applied under the owned workflow lease }
+        "401": { description: Signature, timestamp, nonce, identity, or lease validation failed }
+  /v1/operations:
+    get:
+      operationId: listOperations
+      responses: { "200": { description: Workflow, Adapter receipt, alert, Outbox, and deployment readiness overview } }
+  /v1/outbox/{id}/replays:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: replayOutboxDeadLetter
+      responses: { "201": { description: Dead-letter event requeued with audit and replay record } }
+  /v1/operational-alerts/{id}/acknowledgements:
+    parameters: [{ $ref: "#/components/parameters/ObjectID" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+    post:
+      operationId: acknowledgeOperationalAlert
+      responses: { "200": { description: Operational alert acknowledged } }
   /v1/audit:
     get:
       operationId: listAudit
@@ -944,11 +1016,8 @@ components:
       type: object
       required: [to]
       properties:
-        to: { type: string, enum: [validating, reserved, queued, submitted, processing, succeeded, failed, cancelled, reconciling, settled] }
+        to: { type: string, enum: [validating, reserved, queued, cancelled, reconciling, settled] }
         provider_endpoint_id: { type: string, format: uuid }
-        external_id: { type: string }
-        output: { type: object, additionalProperties: true }
-        error: { type: object, additionalProperties: true }
     Order:
       type: object
       required: [id, tenant_id, customer_id, quote_version_id, status, currency, amount_minor, version, items, subscriptions, entitlements, executions, deliveries, usage, provider_costs, customer_charges]

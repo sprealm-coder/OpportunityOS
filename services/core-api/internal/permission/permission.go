@@ -55,6 +55,14 @@ const (
 	MarketplaceWrite    = "marketplace.write"
 	MarketplaceReview   = "marketplace.review"
 	MarketplaceTakedown = "marketplace.takedown"
+	IntelligenceRead    = "intelligence.read"
+	IntelligenceWrite   = "intelligence.write"
+	FeedbackRead        = "feedback.read"
+	FeedbackWrite       = "feedback.write"
+	WorkflowOperate     = "workflow.operate"
+	AdapterManage       = "adapter.manage"
+	OperationsRead      = "operations.read"
+	OutboxReplay        = "outbox.replay"
 )
 
 var rolePermissions = map[string]map[string]bool{
@@ -73,9 +81,11 @@ var rolePermissions = map[string]map[string]bool{
 		CampaignWrite: true, OutreachWrite: true, DealWrite: true, ExperimentWrite: true,
 		ChannelRead: true, ResellerWrite: true, OwnershipWrite: true,
 		SupplierWrite: true, MarketplaceWrite: true,
+		IntelligenceRead: true, IntelligenceWrite: true, FeedbackRead: true, FeedbackWrite: true,
+		WorkflowOperate: true, OperationsRead: true,
 	},
-	"reviewer": {OpportunityRead: true, OpportunityReview: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, TransactionRead: true, FinanceRead: true, GrowthRead: true, ProofReview: true, CampaignApprove: true, ChannelRead: true, OwnershipApprove: true, SupplierApprove: true, MarketplaceReview: true, MarketplaceTakedown: true, AuditRead: true},
-	"auditor":  {OpportunityRead: true, IncubationRead: true, BlueprintRead: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, TransactionRead: true, FinanceRead: true, GrowthRead: true, ChannelRead: true, AuditRead: true},
+	"reviewer": {OpportunityRead: true, OpportunityReview: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, TransactionRead: true, FinanceRead: true, GrowthRead: true, ProofReview: true, CampaignApprove: true, ChannelRead: true, OwnershipApprove: true, SupplierApprove: true, MarketplaceReview: true, MarketplaceTakedown: true, IntelligenceRead: true, FeedbackRead: true, OperationsRead: true, AuditRead: true},
+	"auditor":  {OpportunityRead: true, IncubationRead: true, BlueprintRead: true, CapabilityRead: true, ProviderRead: true, ProductRead: true, TransactionRead: true, FinanceRead: true, GrowthRead: true, ChannelRead: true, IntelligenceRead: true, FeedbackRead: true, OperationsRead: true, AuditRead: true},
 }
 
 func RequireRole(role, required string) error {

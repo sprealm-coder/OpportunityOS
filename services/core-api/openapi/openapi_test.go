@@ -22,7 +22,7 @@ func TestOpenAPICommercialPlatformContract(t *testing.T) {
 	if err = yaml.Unmarshal(contents, &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.OpenAPI != "3.1.0" || document.Info.Version != "0.7.0" {
+	if document.OpenAPI != "3.1.0" || document.Info.Version != "0.8.0" {
 		t.Fatalf("unexpected OpenAPI version: %s / %s", document.OpenAPI, document.Info.Version)
 	}
 	required := []string{
@@ -51,6 +51,9 @@ func TestOpenAPICommercialPlatformContract(t *testing.T) {
 		"/v1/supplier-rates", "/v1/supplier-quality-records", "/v1/developers", "/v1/publishers", "/v1/listings",
 		"/v1/listings/{id}/versions", "/v1/listings/{id}/transitions", "/v1/listings/{id}/reviews", "/v1/sandbox-runs", "/v1/quality-scores",
 		"/v1/marketplace-disputes", "/v1/marketplace-disputes/{id}/resolutions", "/v1/takedowns", "/v1/takedowns/{id}/reviews",
+		"/v1/intelligence", "/v1/sources", "/v1/sources/{id}/signals", "/v1/signals/{id}/promotions",
+		"/v1/analytics/outcomes", "/v1/outcome-feedback", "/v1/adapter-identities", "/v1/executions/{id}/workflow-runs",
+		"/v1/workflow-steps/leases", "/v1/adapter-results", "/v1/operations", "/v1/outbox/{id}/replays", "/v1/operational-alerts/{id}/acknowledgements",
 	}
 	for _, path := range required {
 		if _, ok := document.Paths[path]; !ok {

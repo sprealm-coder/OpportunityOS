@@ -86,17 +86,33 @@ func (s *Store) MarkOutboxFailed(ctx context.Context, workerID, eventID string, 
 	if deadLetterReason != "" {
 		deadLetter = deadLetterReason
 	}
-	tag, err := s.pool.Exec(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var tenantID string
+	err = tx.QueryRow(ctx, `
 		UPDATE outbox_events
 		SET retry_count=retry_count+1,next_retry_at=$3,dead_letter_reason=$4,last_error=$5,locked_by=NULL,locked_until=NULL
-		WHERE id=$1 AND locked_by=$2 AND processed_at IS NULL`, eventID, workerID, retry, deadLetter, lastError)
+		WHERE id=$1 AND locked_by=$2 AND processed_at IS NULL RETURNING tenant_id`, eventID, workerID, retry, deadLetter, lastError).Scan(&tenantID)
 	if err != nil {
 		return mapError(err)
 	}
-	if tag.RowsAffected() != 1 {
-		return platform.Invalid("outbox_lease_lost", "outbox event lease is no longer owned by this worker")
+	if deadLetterReason != "" {
+		details, marshalErr := json.Marshal(map[string]any{"worker_id": workerID, "last_error": lastError})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		if _, err = tx.Exec(ctx, `
+			INSERT INTO operational_alerts (tenant_id,alert_type,severity,object_type,object_id,message,details)
+			VALUES($1,'outbox_dead_letter','critical','outbox_event',$2,'Outbox event exhausted delivery attempts',$3)
+			ON CONFLICT (tenant_id,alert_type,object_type,object_id) WHERE status IN ('open','acknowledged')
+			DO UPDATE SET severity=EXCLUDED.severity,message=EXCLUDED.message,details=EXCLUDED.details`, tenantID, eventID, details); err != nil {
+			return mapError(err)
+		}
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (s *Store) AcceptInbox(ctx context.Context, scope tenancy.Scope, event inbox.Event) (bool, error) {

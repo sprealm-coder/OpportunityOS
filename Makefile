@@ -1,4 +1,4 @@
-.PHONY: setup migrate seed dev test lint build e2e reset
+.PHONY: setup migrate seed dev test lint build e2e production-check reset
 
 setup:
 	pnpm node scripts/task.mjs setup
@@ -16,6 +16,7 @@ build:
 	pnpm node scripts/task.mjs build
 e2e:
 	pnpm node scripts/task.mjs e2e
+production-check:
+	pnpm node scripts/task.mjs productionCheck
 reset:
 	pnpm node scripts/task.mjs reset
-

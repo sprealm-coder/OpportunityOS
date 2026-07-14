@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ type Server struct {
 	store           application.Store
 	limiter         *rateLimiter
 	allowHeaderAuth bool
+	secureCookies   bool
 }
 
 func New() http.Handler {
@@ -34,7 +36,7 @@ func NewWithStore(store application.Store) http.Handler {
 }
 
 func newHandler(store application.Store, allowHeaderAuth bool) http.Handler {
-	server := &Server{store: store, limiter: newRateLimiter(120, time.Minute), allowHeaderAuth: allowHeaderAuth}
+	server := &Server{store: store, limiter: newRateLimiter(120, time.Minute), allowHeaderAuth: allowHeaderAuth, secureCookies: strings.EqualFold(os.Getenv("SESSION_COOKIE_SECURE"), "true")}
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(server.requestContext)
@@ -46,6 +48,7 @@ func newHandler(store application.Store, allowHeaderAuth bool) http.Handler {
 	})
 	r.Route("/v1", func(r chi.Router) {
 		r.Post("/auth/sessions", server.createSession)
+		r.Post("/adapter-results", server.ingestAdapterResult)
 		r.Group(func(r chi.Router) {
 			r.Use(server.authenticate)
 			r.Get("/auth/session", server.getSession)
@@ -156,6 +159,18 @@ func newHandler(store application.Store, allowHeaderAuth bool) http.Handler {
 			r.With(server.requirePermission(permission.MarketplaceReview)).Post("/marketplace-disputes/{id}/resolutions", server.resolveMarketplaceDispute)
 			r.With(server.requirePermission(permission.MarketplaceWrite)).Post("/takedowns", server.requestTakedown)
 			r.With(server.requirePermission(permission.MarketplaceTakedown)).Post("/takedowns/{id}/reviews", server.reviewTakedown)
+			r.With(server.requirePermission(permission.IntelligenceRead)).Get("/intelligence", server.listIntelligence)
+			r.With(server.requirePermission(permission.IntelligenceWrite)).Post("/sources", server.createSource)
+			r.With(server.requirePermission(permission.IntelligenceWrite)).Post("/sources/{id}/signals", server.importSignal)
+			r.With(server.requirePermission(permission.IntelligenceWrite)).Post("/signals/{id}/promotions", server.promoteSignal)
+			r.With(server.requirePermission(permission.FeedbackRead)).Get("/analytics/outcomes", server.listAnalytics)
+			r.With(server.requirePermission(permission.FeedbackWrite)).Post("/outcome-feedback", server.recordOutcomeFeedback)
+			r.With(server.requirePermission(permission.AdapterManage)).Post("/adapter-identities", server.registerAdapterIdentity)
+			r.With(server.requirePermission(permission.WorkflowOperate)).Post("/executions/{id}/workflow-runs", server.startWorkflowRun)
+			r.With(server.requirePermission(permission.WorkflowOperate)).Post("/workflow-steps/leases", server.leaseWorkflowStep)
+			r.With(server.requirePermission(permission.OperationsRead)).Get("/operations", server.listOperations)
+			r.With(server.requirePermission(permission.OutboxReplay)).Post("/outbox/{id}/replays", server.replayOutbox)
+			r.With(server.requirePermission(permission.OperationsRead)).Post("/operational-alerts/{id}/acknowledgements", server.acknowledgeOperationalAlert)
 			r.With(server.requirePermission(permission.AuditRead)).Get("/audit", server.listAudit)
 		})
 	})
@@ -250,6 +265,12 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		"http://localhost:3005": true,
 		"http://localhost:3006": true,
 	}
+	for _, origin := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
+		origin = strings.TrimSpace(origin)
+		if origin != "" {
+			allowed[origin] = true
+		}
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		if allowed[origin] {
@@ -283,7 +304,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	maxAge := int(time.Until(session.ExpiresAt).Seconds())
 	http.SetCookie(w, &http.Cookie{
 		Name: auth.SessionCookie, Value: session.Token, Path: "/", Expires: session.ExpiresAt,
-		MaxAge: maxAge, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode,
+		MaxAge: maxAge, HttpOnly: true, Secure: r.TLS != nil || s.secureCookies, SameSite: http.SameSiteLaxMode,
 	})
 	writeJSON(w, http.StatusCreated, session)
 }
@@ -309,7 +330,7 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.SetCookie(w, &http.Cookie{Name: auth.SessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: auth.SessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil || s.secureCookies, SameSite: http.SameSiteLaxMode})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1120,6 +1141,10 @@ func (s *Server) transitionExecution(w http.ResponseWriter, r *http.Request) {
 	}
 	var input application.ExecutionTransitionInput
 	if !decode(w, r, &input) {
+		return
+	}
+	if map[string]bool{"submitted": true, "processing": true, "succeeded": true, "failed": true}[input.To] || input.ExternalID != "" || input.Output != nil || input.Error != nil {
+		writeError(w, r, http.StatusForbidden, platform.Invalid("trusted_adapter_required", "external execution results must use the signed Adapter ingress"))
 		return
 	}
 	item, err := store.TransitionExecution(r.Context(), tenantScope, chi.URLParam(r, "id"), input, requestID)

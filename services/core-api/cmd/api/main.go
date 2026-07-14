@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,6 +14,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--healthcheck" {
+		runHealthcheck()
+		return
+	}
 	addr := os.Getenv("HTTP_ADDR")
 	if addr == "" {
 		addr = ":8080"
@@ -38,6 +43,24 @@ func main() {
 	logger.Info("core API starting", "addr", addr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Error("core API stopped", "error", err)
+		os.Exit(1)
+	}
+}
+
+func runHealthcheck() {
+	url := os.Getenv("HEALTHCHECK_URL")
+	if url == "" {
+		url = "http://127.0.0.1:8080/healthz"
+	}
+	client := http.Client{Timeout: 3 * time.Second}
+	response, err := client.Get(url)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		fmt.Fprintln(os.Stderr, response.Status)
 		os.Exit(1)
 	}
 }
